@@ -13,6 +13,7 @@
     "aws-sdk": "^2.1656.0",
     "axios": "^1.7.2",
     "express": "*",
-    "node-microphone": "*"
+    "node-microphone": "*",
+    "socket.io": "^4.7.5"
   }
 }
