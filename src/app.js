@@ -5,6 +5,7 @@ const indexRouter = require('./routes/index');
 const wakeWordController = require('./controllers/wakeWordController');
 const { scheduleHourlyAnnouncement } = require('./controllers/timeAnnouncerController');
 const { logWithTimestamp } = require('./utils/logger');
+const { synthesizeSpeech } = require('./utils/polly_util');
 const path = require('path');
 
 logWithTimestamp('Initializing application...');
@@ -31,8 +32,16 @@ app.use((req, res, next) => {
 });
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
+server.listen(PORT, async () => {
   logWithTimestamp(`Server is running on port ${PORT}`);
+  
+  // Synthesize and play the startup message
+  try {
+    await synthesizeSpeech('System started.');
+    logWithTimestamp('Startup message played successfully');
+  } catch (error) {
+    logWithTimestamp(`Error playing startup message: ${error.message}`);
+  }
 });
 
 // Initialize wake word detection
