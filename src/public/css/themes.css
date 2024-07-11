@@ -1,0 +1,42 @@
+:root {
+    --background-color: #f7f9fc; /* Light background */
+    --text-color: #333; /* Dark text */
+    --status-background: #ffffff; /* White status background */
+    --button-background: #28a745; /* Green button background */
+    --button-text: #ffffff; /* White button text */
+    --button-hover: #218838; /* Darker green on hover */
+    --chat-background: #ffffff; /* White chat background */
+    --input-border: #cccccc; /* Light input border */
+    --widget-background: #ffffff; /* White widget background */
+}
+
+body.dark {
+    --background-color: #333333; /* Dark background */
+    --text-color: #f0f0f0; /* Light text */
+    --status-background: #444444; /* Dark status background */
+    --button-background: #007bff; /* Blue button background */
+    --button-text: #ffffff; /* White button text */
+    --button-hover: #0056b3; /* Darker blue on hover */
+    --chat-background: #424242; /* Dark chat background */
+    --input-border: #555555; /* Dark input border */
+    --widget-background: #444444; /* Dark widget background */
+}
+
+body {
+    background-color: var(--background-color);
+    color: var(--text-color);
+}
+
+header, .container, .widget {
+    background-color: var(--status-background);
+    color: var(--text-color);
+}
+
+button {
+    background-color: var(--button-background);
+    color: var(--button-text);
+}
+
+button:hover {
+    background-color: var(--button-hover);
+}

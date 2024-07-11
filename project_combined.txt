@@ -1,0 +1,1712 @@
+Packages used:
+@google-cloud/speech *
+@picovoice/porcupine-node *
+@picovoice/pvrecorder-node *
+aws-sdk ^2.1656.0
+axios ^1.7.2
+express *
+node-microphone *
+
+File: combine_files.sh
+--- Start of combine_files.sh ---
+#!/bin/bash
+
+# Define the output file
+OUTPUT_FILE="project_combined.txt"
+
+# Clear the output file if it already exists
+> $OUTPUT_FILE
+
+# Function to check if a file is a text file
+is_text_file() {
+    local file="$1"
+    local mime_type=$(file -b --mime-type "$file")
+    
+    [[ $mime_type == text/* || $mime_type == application/json || $mime_type == application/javascript ]] || \
+    [[ $file =~ \.(txt|js|json|md|py|sh|conf|css|html|htm|xml|yml|yaml|ini|cfg|log)$ ]]
+}
+
+combine_files() {
+    local dir=$1
+    local indent=$2
+    
+    for item in "$dir"/*; do
+        if [ -d "$item" ]; then
+            echo "${indent}Directory: $(basename "$item")" >> $OUTPUT_FILE
+            combine_files "$item" "$indent  "
+        elif [ -f "$item" ] && is_text_file "$item"; then
+            echo "${indent}File: $(basename "$item")" >> $OUTPUT_FILE
+            echo "${indent}--- Start of $(basename "$item") ---" >> $OUTPUT_FILE
+            
+            if [ -r "$item" ]; then
+                cat "$item" >> $OUTPUT_FILE
+            else
+                echo "${indent}WARNING: No read permission for this file" >> $OUTPUT_FILE
+            fi
+            
+            echo "${indent}--- End of $(basename "$item") ---" >> $OUTPUT_FILE
+            echo >> $OUTPUT_FILE
+        fi
+    done
+}
+
+# List packages from package.json
+if [ -f "package.json" ]; then
+    echo "Packages used:" >> $OUTPUT_FILE
+    jq -r 'if .dependencies then .dependencies | to_entries[] | "\(.key) \(.value)" else empty end, if .devDependencies then .devDependencies | to_entries[] | "\(.key) \(.value)" else empty end' package.json >> $OUTPUT_FILE
+    echo >> $OUTPUT_FILE
+fi
+
+# Start combining files from the current directory
+combine_files "." ""
+
+echo "Files and folder structure have been combined into $OUTPUT_FILE"
+--- End of combine_files.sh ---
+
+Directory: database
+File: package.json
+--- Start of package.json ---
+{
+  "name": "voice-assistant",
+  "version": "1.0.0",
+  "description": "Voice Assistant Project",
+  "main": "app.js",
+  "scripts": {
+    "start": "node src/app.js"
+  },
+  "dependencies": {
+    "@google-cloud/speech": "*",
+    "@picovoice/porcupine-node": "*",
+    "@picovoice/pvrecorder-node": "*",
+    "aws-sdk": "^2.1656.0",
+    "axios": "^1.7.2",
+    "express": "*",
+    "node-microphone": "*"
+  }
+}
+--- End of package.json ---
+
+File: project_combined.txt
+--- Start of project_combined.txt ---
+--- End of project_combined.txt ---
+
+File: README.md
+--- Start of README.md ---
+# Voice Assistant Project
+
+This project implements a voice assistant using Node.js with Express on a Raspberry Pi.
+
+## Prerequisites
+
+- Node.js
+- Raspberry Pi with a microphone (device: plughw:3,0)
+- Google Cloud Speech API credentials
+- Porcupine access key from Picovoice
+
+## Installation
+
+1. Clone the repository.
+2. Install dependencies: `npm install`
+3. Configure the `src/config/config.js` file with your access keys and credentials.
+
+## Usage
+
+1. Start the server: `npm start`
+2. Say the wake word "Computer" to activate audio recording.
+3. The recorded audio will be transcribed using Google Cloud Speech API.
+4. The transcription result will be logged in the console.
+
+## License
+
+This project is licensed under the MIT License.--- End of README.md ---
+
+Directory: scripts
+  File: lights.py
+  --- Start of lights.py ---
+import sys
+import time
+import board
+import adafruit_dotstar
+
+DOTSTAR_DATA = board.D5
+DOTSTAR_CLOCK = board.D6
+
+dots = adafruit_dotstar.DotStar(DOTSTAR_CLOCK, DOTSTAR_DATA, 3, brightness=0.2, pixel_order=adafruit_dotstar.RBG)
+
+def set_color(color):
+    print(f"Setting color: {color}")
+    for i in range(len(dots)):
+        dots[i] = color
+    dots.show()
+
+def wheel(pos):
+    if pos < 0 or pos > 255:
+        return (0, 0, 0)
+    if pos < 85:
+        return (255 - pos * 3, pos * 3, 0)
+    if pos < 170:
+        pos -= 85
+        return (0, 255 - pos * 3, pos * 3)
+    pos -= 170
+    return (pos * 3, 0, 255 - pos * 3)
+
+def strobe_effect(duration=1):
+    start_time = time.time()
+    print(f'Start time: {start_time:.2f}')
+    while time.time() - start_time < duration:
+        elapsed_time = time.time() - start_time
+        print(f'Elapsed time: {elapsed_time:.2f} seconds', end='\r')
+        j = int((elapsed_time * 255 / duration) % 256)
+        for i in range(len(dots)):
+            rc_index = (i * 256 // len(dots)) + j * 5
+            dots[i] = wheel(rc_index & 255)
+        dots.show()
+        time.sleep(0.01)
+    end_time = time.time()
+    set_color((0, 0, 0))
+    print(f'\nEnd time: {end_time:.2f}')
+    print(f'Total duration: {end_time - start_time:.2f} seconds')
+
+if __name__ == "__main__":
+    command = sys.argv[1]
+    if command == "solid":
+        color = tuple(map(int, sys.argv[2:]))
+        set_color(color)
+    elif command == "strobe":
+        duration = float(sys.argv[2]) if len(sys.argv) > 2 else 1
+        strobe_effect(duration=duration)
+    elif command == "off":
+        set_color((0, 0, 0))  --- End of lights.py ---
+
+Directory: sounds
+Directory: src
+  File: app.js
+  --- Start of app.js ---
+const express = require('express');
+const http = require('http');
+const socket = require('./socket');
+const indexRouter = require('./routes/index');
+const wakeWordController = require('./controllers/wakeWordController');
+const { scheduleHourlyAnnouncement } = require('./controllers/timeAnnouncerController');
+const { logWithTimestamp } = require('./utils/logger');
+const path = require('path');
+
+logWithTimestamp('Initializing application...');
+
+const app = express();
+const server = http.createServer(app);
+const io = socket.init(server);
+
+app.set('view engine', 'ejs');
+app.set('views', path.join(__dirname, 'views'));
+app.use('/', indexRouter);
+
+// Serve static files
+app.use(express.static(path.join(__dirname, 'public')));
+
+// Set correct MIME types
+app.use((req, res, next) => {
+  if (req.url.endsWith('.js')) {
+    res.type('application/javascript');
+  } else if (req.url.endsWith('.css')) {
+    res.type('text/css');
+  }
+  next();
+});
+
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, () => {
+  logWithTimestamp(`Server is running on port ${PORT}`);
+});
+
+// Initialize wake word detection
+wakeWordController.initializeWakeWordDetection()
+  .then(() => {
+    logWithTimestamp('Wake word detection initialized successfully');
+  })
+  .catch((error) => {
+    logWithTimestamp(`Error initializing wake word detection: ${error.message}`);
+  });
+
+// Schedule hourly time announcements
+scheduleHourlyAnnouncement();
+logWithTimestamp('Hourly announcements scheduled');  --- End of app.js ---
+
+  Directory: config
+    File: config.js
+    --- Start of config.js ---
+module.exports = {
+  PORCUPINE_ACCESS_KEY: 'M3yNxgXslqTlFyd9Krh4z0AGCT7r7P70II12AuHhQfgO8Zu+ykZL6w==',
+  AUDIO_DEVICE: 'default',
+  AUDIO_FORMAT: {
+    encoding: 'LINEAR16',
+    sampleRateHertz: 16000,
+    languageCode: 'en-US',
+  },
+  GOOGLE_APPLICATION_CREDENTIALS: '/home/williew/leafy-firmament-425414-s9-0ee1457e29e4.json',
+};    --- End of config.js ---
+
+  Directory: controllers
+    File: alarmController.js
+    --- Start of alarmController.js ---
+
+// alarmController.js
+const express = require('express');
+const router = express.Router();
+const Alarm = require('../models/alarm');
+
+router.post('/set', async (req, res) => {
+    const { time, message } = req.body;
+    try {
+        const alarm = new Alarm({ time, message });
+        await alarm.save();
+        res.status(201).send(alarm);
+    } catch (error) {
+        res.status(400).send(error);
+    }
+});
+
+router.get('/', async (req, res) => {
+    try {
+        const alarms = await Alarm.find({});
+        res.status(200).send(alarms);
+    } catch (error) {
+        res.status(500).send(error);
+    }
+});
+
+router.delete('/:id', async (req, res) => {
+    try {
+        const alarm = await Alarm.findByIdAndDelete(req.params.id);
+        if (!alarm) {
+            return res.status(404).send();
+        }
+        res.status(200).send(alarm);
+    } catch (error) {
+        res.status(500).send(error);
+    }
+});
+
+module.exports = router;
+    --- End of alarmController.js ---
+
+    File: audioController.js
+    --- Start of audioController.js ---
+const Microphone = require('node-microphone');
+const config = require('../config/config');
+const { logWithTimestamp } = require('../utils/logger');
+
+let micInstance = null;
+let audioStream = null;
+
+const startRecording = () => {
+    logWithTimestamp('Starting audio recording...');
+    if (!micInstance) {
+        micInstance = new Microphone({
+            device: config.AUDIO_DEVICE,
+            rate: '16000',
+            channels: '1',
+            debug: false // Set to true only when debugging
+        });
+        logWithTimestamp('Microphone instance created');
+    }
+
+    if (!audioStream) {
+        audioStream = micInstance.startRecording();
+        
+        if (audioStream) {
+            audioStream.dataReceived = false;
+            
+            audioStream.on('data', () => {
+                if (audioStream && !audioStream.dataReceived) {
+                    logWithTimestamp('First audio data received');
+                    audioStream.dataReceived = true;
+                }
+            });
+            
+            audioStream.on('error', (error) => {
+                logWithTimestamp(`Error in audio stream: ${error}`);
+            });
+            logWithTimestamp('Audio stream started');
+        } else {
+            logWithTimestamp('Failed to start audio stream');
+        }
+    } else {
+        logWithTimestamp('Reusing existing audio stream');
+    }
+
+    return audioStream;
+};
+
+const stopRecording = () => {
+    if (micInstance) {
+        micInstance.stopRecording();
+        if (audioStream) {
+            audioStream.removeAllListeners('data');
+            audioStream.removeAllListeners('error');
+        }
+        audioStream = null;
+        logWithTimestamp('Stopped audio recording');
+    }
+};
+
+module.exports = {
+    startRecording,
+    stopRecording,
+};
+    --- End of audioController.js ---
+
+    File: mopidyController.js
+    --- Start of mopidyController.js ---
+
+// mopidyController.js
+const express = require('express');
+const router = express.Router();
+const MopidyClient = require('../services/mopidyService');
+
+const mopidy = new MopidyClient();
+
+router.post('/play', async (req, res) => {
+    const { uri } = req.body;
+    try {
+        await mopidy.play(uri);
+        res.status(200).send({ message: 'Playing' });
+    } catch (error) {
+        res.status(500).send(error);
+    }
+});
+
+router.post('/pause', async (req, res) => {
+    try {
+        await mopidy.pause();
+        res.status(200).send({ message: 'Paused' });
+    } catch (error) {
+        res.status(500).send(error);
+    }
+});
+
+router.post('/resume', async (req, res) => {
+    try {
+        await mopidy.resume();
+        res.status(200).send({ message: 'Resumed' });
+    } catch (error) {
+        res.status(500).send(error);
+    }
+});
+
+router.post('/stop', async (req, res) => {
+    try {
+        await mopidy.stop();
+        res.status(200).send({ message: 'Stopped' });
+    } catch (error) {
+        res.status(500).send(error);
+    }
+});
+
+router.post('/next', async (req, res) => {
+    try {
+        await mopidy.next();
+        res.status(200).send({ message: 'Next track' });
+    } catch (error) {
+        res.status(500).send(error);
+    }
+});
+
+router.post('/previous', async (req, res) => {
+    try {
+        await mopidy.previous();
+        res.status(200).send({ message: 'Previous track' });
+    } catch (error) {
+        res.status(500).send(error);
+    }
+});
+
+router.get('/tracklist', async (req, res) => {
+    try {
+        const tracklist = await mopidy.getTracklist();
+        res.status(200).send(tracklist);
+    } catch (error) {
+        res.status(500).send(error);
+    }
+});
+
+module.exports = router;
+    --- End of mopidyController.js ---
+
+    File: quoteController.js
+    --- Start of quoteController.js ---
+
+// quoteController.js
+const express = require('express');
+const router = express.Router();
+const Quote = require('../models/quote');
+
+router.post('/add', async (req, res) => {
+    const { text, author } = req.body;
+    try {
+        const quote = new Quote({ text, author });
+        await quote.save();
+        res.status(201).send(quote);
+    } catch (error) {
+        res.status(400).send(error);
+    }
+});
+
+router.get('/', async (req, res) => {
+    try {
+        const quotes = await Quote.find({});
+        res.status(200).send(quotes);
+    } catch (error) {
+        res.status(500).send(error);
+    }
+});
+
+router.delete('/:id', async (req, res) => {
+    try {
+        const quote = await Quote.findByIdAndDelete(req.params.id);
+        if (!quote) {
+            return res.status(404).send();
+        }
+        res.status(200).send(quote);
+    } catch (error) {
+        res.status(500).send(error);
+    }
+});
+
+module.exports = router;
+    --- End of quoteController.js ---
+
+    File: sttController.js
+    --- Start of sttController.js ---
+const speech = require('@google-cloud/speech');
+const config = require('../config/config');
+const audioController = require('./audioController');
+const { logWithTimestamp } = require('../utils/logger');
+
+const client = new speech.SpeechClient();
+
+const transcribeAudio = () => {
+    return new Promise((resolve, reject) => {
+        const request = {
+            config: {
+                encoding: config.AUDIO_FORMAT.encoding,
+                sampleRateHertz: config.AUDIO_FORMAT.sampleRateHertz,
+                languageCode: config.AUDIO_FORMAT.languageCode,
+                audioChannelCount: 1,
+            },
+            interimResults: false,
+        };
+
+        let streamEnded = false;
+
+        logWithTimestamp('Starting transcription stream');
+        const recognizeStream = client
+            .streamingRecognize(request)
+            .on('error', (error) => {
+                logWithTimestamp(`Error in transcription: ${error}`);
+                if (!streamEnded) {
+                    streamEnded = true;
+                    reject(error);
+                }
+            })
+            .on('data', (data) => {
+                if (!streamEnded) {
+                    const transcription = data.results
+                        .map((result) => result.alternatives[0].transcript)
+                        .join('\n');
+                    logWithTimestamp(`Transcription received: ${transcription}`);
+                    streamEnded = true;
+                    recognizeStream.end();
+                    resolve(transcription);
+                }
+            })
+            .on('end', () => {
+                if (!streamEnded) {
+                    logWithTimestamp('Transcription stream ended without data');
+                    streamEnded = true;
+                    resolve('');
+                }
+            });
+
+        const audioStream = audioController.startRecording();
+        
+        audioStream.on('data', (chunk) => {
+            if (!streamEnded) {
+                recognizeStream.write(chunk);
+            }
+        });
+
+        // Stop recording after 2 seconds
+        setTimeout(() => {
+            if (!streamEnded) {
+                logWithTimestamp('Stopping recording after timeout');
+                audioController.stopRecording();
+                recognizeStream.end();
+            }
+        }, 2000);
+    });
+};
+
+module.exports = {
+    transcribeAudio,
+};    --- End of sttController.js ---
+
+    File: timeAnnouncerController.js
+    --- Start of timeAnnouncerController.js ---
+const axios = require('axios');
+const { synthesizeSpeech } = require('../utils/polly_util');
+
+async function getAffirmation() {
+    try {
+        const response = await axios.get('https://affirmations.dev');
+        const fullAffirmation = response.data.affirmation;
+        const words = fullAffirmation.split(' ');
+        return words.slice(0, 3).join(' '); // Get first 3 words
+    } catch (error) {
+        console.error('Error fetching affirmation:', error);
+        return ''; // Return empty string if there's an error
+    }
+}
+
+async function announceTime() {
+    const now = new Date();
+    let hours = now.getHours();
+    const minutes = now.getMinutes();
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    
+    hours = hours % 12;
+    hours = hours ? hours : 12; // the hour '0' should be '12'
+    
+    let timeString = `It's ${hours}`;
+    if (minutes !== 0) {
+        timeString += ` ${minutes}`;
+    }
+    if (minutes === 0) {
+        timeString += " o'clock";
+    }
+    timeString += ` ${ampm}`;
+
+    const affirmation = await getAffirmation();
+    let announcement = '';
+
+    // Randomly decide whether to put the affirmation before or after the time
+    if (Math.random() < 0.5) {
+        announcement = `${affirmation}. ${timeString}`;
+    } else {
+        announcement = `${timeString}. ${affirmation}`;
+    }
+
+    try {
+        await synthesizeSpeech(announcement);
+        console.log('Time announced successfully');
+    } catch (error) {
+        console.error('Error announcing time:', error);
+    }
+}
+
+function scheduleHourlyAnnouncement() {
+    const now = new Date();
+    const delay = (60 - now.getMinutes()) * 60 * 1000; // ms until next hour
+
+    setTimeout(() => {
+        announceTime();
+        // Schedule the next announcement
+        setInterval(announceTime, 60 * 60 * 1000); // Every hour
+    }, delay);
+}
+
+module.exports = { announceTime, scheduleHourlyAnnouncement };    --- End of timeAnnouncerController.js ---
+
+    File: wakeWordController.js
+    --- Start of wakeWordController.js ---
+const { Porcupine, BuiltinKeyword } = require('@picovoice/porcupine-node');
+const { PvRecorder } = require('@picovoice/pvrecorder-node');
+const config = require('../config/config');
+const sttController = require('./sttController');
+const { exec } = require('child_process');
+const util = require('util');
+const path = require('path');
+const { playSound } = require('../utils/polly_util');
+const { logWithTimestamp } = require('../utils/logger');
+const execPromise = util.promisify(exec);
+const socket = require('../socket');
+
+let recorder;
+let isProcessing = false;
+
+async function startRecorder(frameLength) {
+    if (!recorder) {
+        logWithTimestamp(`Initializing recorder with frame length: ${frameLength}`);
+        logWithTimestamp('Using default audio device');
+        
+        try {
+            recorder = new PvRecorder(frameLength, -1);
+            await recorder.start();
+            logWithTimestamp('Recorder initialized successfully');
+        } catch (error) {
+            logWithTimestamp(`Error creating PvRecorder: ${error.message}`);
+            throw error;
+        }
+    }
+}
+
+async function setLights(command, ...args) {
+    const argString = args.map(arg => Array.isArray(arg) ? arg.join(',') : arg).join(' ');
+    const scriptPath = path.join(__dirname, '..', '..', 'scripts', 'lights.py');
+    try {
+        await execPromise(`python3 ${scriptPath} ${command} ${argString}`);
+    } catch (error) {
+        logWithTimestamp(`Error executing lights.py: ${error.message}`);
+    }
+}
+
+const handleWakeWord = async () => {
+    if (isProcessing) {
+        logWithTimestamp('Already processing a command, ignoring this wake word.');
+        return;
+    }
+
+    isProcessing = true;
+
+    try {
+        logWithTimestamp('Wake word detected!');
+        
+        socket.io.emit('wakeWordDetected', { message: 'Wake word detected!' });
+
+        const dingPath = path.join(__dirname, '..', '..', 'sounds', 'ding.wav');
+        playSound(dingPath).catch(error => logWithTimestamp(`Error playing ding: ${error}`));
+        
+        await setLights('strobe', 1);
+        
+        const transcription = await sttController.transcribeAudio();
+        logWithTimestamp(`Transcription: ${transcription || 'No transcription result received.'}`);
+        
+        socket.io.emit('transcriptionResult', { message: transcription || 'I didn\'t catch that. Could you please repeat?' });
+
+        await setLights('solid', 0, 0, 255);
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        await setLights('off');
+    } catch (error) {
+        logWithTimestamp(`Error in transcription: ${error}`);
+        socket.io.emit('error', { message: 'An error occurred while processing your request.' });
+    } finally {
+        isProcessing = false;
+        logWithTimestamp('Listening for wake word...');
+    }
+};
+
+const initializeWakeWordDetection = async () => {
+    try {
+        logWithTimestamp('Starting wake word detection initialization...');
+        
+        logWithTimestamp('Initializing Porcupine...');
+        const handle = new Porcupine(
+            config.PORCUPINE_ACCESS_KEY,
+            [BuiltinKeyword.COMPUTER],
+            [0.5]
+        );
+        logWithTimestamp('Porcupine initialized successfully.');
+
+        logWithTimestamp('Initializing recorder...');
+        await startRecorder(handle.frameLength);
+
+        logWithTimestamp('Entering detection loop...');
+        while (true) {
+            try {
+                const pcm = await recorder.read();
+                const detectionResult = handle.process(pcm);
+                if (detectionResult >= 0) {
+                    await handleWakeWord();
+                }
+            } catch (loopError) {
+                logWithTimestamp(`Error in detection loop: ${loopError.message}`);
+            }
+        }
+    } catch (error) {
+        logWithTimestamp(`Error in wake word detection: ${error.message}`);
+        if (error.stack) {
+            logWithTimestamp(`Stack trace: ${error.stack}`);
+        }
+    }
+};
+
+module.exports = {
+    initializeWakeWordDetection,
+};    --- End of wakeWordController.js ---
+
+  Directory: models
+    File: alarm.js
+    --- Start of alarm.js ---
+
+// alarm.js
+const mongoose = require('mongoose');
+
+const alarmSchema = new mongoose.Schema({
+    time: {
+        type: String,
+        required: true
+    },
+    message: {
+        type: String,
+        required: true
+    }
+}, {
+    timestamps: true
+});
+
+const Alarm = mongoose.model('Alarm', alarmSchema);
+
+module.exports = Alarm;
+    --- End of alarm.js ---
+
+    File: quote.js
+    --- Start of quote.js ---
+    --- End of quote.js ---
+
+    File: todo.js
+    --- Start of todo.js ---
+
+// todo.js
+const mongoose = require('mongoose');
+
+const todoSchema = new mongoose.Schema({
+    task: {
+        type: String,
+        required: true,
+        trim: true
+    },
+    completed: {
+        type: Boolean,
+        default: false
+    }
+}, {
+    timestamps: true
+});
+
+const Todo = mongoose.model('Todo', todoSchema);
+
+module.exports = Todo;
+    --- End of todo.js ---
+
+  Directory: public
+    Directory: css
+      File: styles.css
+      --- Start of styles.css ---
+/* Base styles */
+body {
+    font-family: 'Roboto', sans-serif;
+    background-color: #f7f9fc; /* Light background color for a clean look */
+    color: #333; /* Dark text color for readability */
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 90%;
+    padding: 20px;
+    background-color: #0066cc; /* Bright header background */
+    border-radius: 10px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    margin: 20px 0;
+    color: #fff; /* White text for contrast */
+}
+
+header h1 {
+    margin: 0;
+}
+
+#time-display {
+    font-size: 2em;
+}
+
+.container {
+    display: flex;
+    justify-content: space-between;
+    width: 90%;
+    margin: 20px auto;
+    padding: 20px;
+    background-color: #fff; /* White background for contrast */
+    border-radius: 10px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+.column {
+    flex: 1;
+    margin: 0 10px;
+}
+
+.left-column, .right-column {
+    flex: 0.5;
+}
+
+.middle-column {
+    flex: 2;
+}
+
+.widget {
+    background-color: #ffffff; /* White background for widgets */
+    padding: 15px;
+    margin-bottom: 20px;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    color: #333; /* Dark text for readability */
+}
+
+.widget h3 {
+    margin-top: 0;
+    color: #0066cc; /* Bright color for widget headers */
+}
+
+button {
+    display: block;
+    width: 100%;
+    margin-bottom: 10px;
+    padding: 10px;
+    border: none;
+    background-color: #28a745; /* Green button background */
+    color: #fff; /* White text for contrast */
+    border-radius: 5px;
+    cursor: pointer;
+    transition: background-color 0.3s;
+}
+
+button:hover {
+    background-color: #218838; /* Darker green on hover */
+}
+
+.dark-theme {
+    background-color: #333; /* Dark background for dark theme */
+    color: #f0f0f0; /* Light text for contrast */
+}
+
+.dark-theme .header, .dark-theme .container, .dark-theme .widget {
+    background-color: #444; /* Dark background for elements */
+    color: #f0f0f0; /* Light text for contrast */
+}
+
+.dark-theme button {
+    background-color: #007bff; /* Blue button background */
+}
+
+.dark-theme button:hover {
+    background-color: #0056b3; /* Darker blue on hover */
+}
+
+/* Add these styles to your existing styles.css file */
+
+.messages {
+    height: 300px;
+    overflow-y: auto;
+    border: 1px solid var(--input-border);
+    padding: 10px;
+    margin-bottom: 10px;
+}
+
+.system-message {
+    color: #888;
+    font-style: italic;
+}
+
+.assistant-message {
+    color: #0066cc;
+}
+
+.error-message {
+    color: #cc0000;
+}      --- End of styles.css ---
+
+      File: themes.css
+      --- Start of themes.css ---
+:root {
+    --background-color: #f7f9fc; /* Light background */
+    --text-color: #333; /* Dark text */
+    --status-background: #ffffff; /* White status background */
+    --button-background: #28a745; /* Green button background */
+    --button-text: #ffffff; /* White button text */
+    --button-hover: #218838; /* Darker green on hover */
+    --chat-background: #ffffff; /* White chat background */
+    --input-border: #cccccc; /* Light input border */
+    --widget-background: #ffffff; /* White widget background */
+}
+
+body.dark {
+    --background-color: #333333; /* Dark background */
+    --text-color: #f0f0f0; /* Light text */
+    --status-background: #444444; /* Dark status background */
+    --button-background: #007bff; /* Blue button background */
+    --button-text: #ffffff; /* White button text */
+    --button-hover: #0056b3; /* Darker blue on hover */
+    --chat-background: #424242; /* Dark chat background */
+    --input-border: #555555; /* Dark input border */
+    --widget-background: #444444; /* Dark widget background */
+}
+
+body {
+    background-color: var(--background-color);
+    color: var(--text-color);
+}
+
+header, .container, .widget {
+    background-color: var(--status-background);
+    color: var(--text-color);
+}
+
+button {
+    background-color: var(--button-background);
+    color: var(--button-text);
+}
+
+button:hover {
+    background-color: var(--button-hover);
+}
+      --- End of themes.css ---
+
+    File: index.html
+    --- Start of index.html ---
+    --- End of index.html ---
+
+    Directory: js
+      File: alarm.js
+      --- Start of alarm.js ---
+
+document.addEventListener('DOMContentLoaded', () => {
+    const alarmButton = document.getElementById('set-alarm');
+
+    alarmButton.addEventListener('click', () => {
+        const time = document.getElementById('alarm-time').value;
+        if (time) {
+            fetch('/api/alarms', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ time }),
+            })
+                .then(response => response.json())
+                .then(data => {
+                    console.log('Alarm set:', data);
+                })
+                .catch(error => {
+                    console.error('Error setting alarm:', error);
+                });
+        }
+    });
+});
+      --- End of alarm.js ---
+
+      File: audioVisualizer.js
+      --- Start of audioVisualizer.js ---
+
+const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+const analyser = audioContext.createAnalyser();
+const dataArray = new Uint8Array(analyser.frequencyBinCount);
+const canvas = document.getElementById('audio-visualizer');
+const canvasContext = canvas.getContext('2d');
+
+function draw() {
+    requestAnimationFrame(draw);
+    analyser.getByteTimeDomainData(dataArray);
+
+    canvasContext.fillStyle = 'rgb(200, 200, 200)';
+    canvasContext.fillRect(0, 0, canvas.width, canvas.height);
+
+    canvasContext.lineWidth = 2;
+    canvasContext.strokeStyle = 'rgb(0, 0, 0)';
+
+    canvasContext.beginPath();
+
+    const sliceWidth = (canvas.width * 1.0) / analyser.fftSize;
+    let x = 0;
+
+    for (let i = 0; i < analyser.fftSize; i++) {
+        const v = dataArray[i] / 128.0;
+        const y = (v * canvas.height) / 2;
+
+        if (i === 0) {
+            canvasContext.moveTo(x, y);
+        } else {
+            canvasContext.lineTo(x, y);
+        }
+
+        x += sliceWidth;
+    }
+
+    canvasContext.lineTo(canvas.width, canvas.height / 2);
+    canvasContext.stroke();
+}
+
+draw();
+      --- End of audioVisualizer.js ---
+
+      File: chat.js
+      --- Start of chat.js ---
+
+const chatSocket = new WebSocket('ws://localhost:3000/chat');
+
+chatSocket.onmessage = (event) => {
+    const data = JSON.parse(event.data);
+    const messages = document.getElementById('messages');
+    const messageElement = document.createElement('div');
+    messageElement.innerText = data.message;
+    messages.appendChild(messageElement);
+};
+
+document.getElementById('send-message').addEventListener('click', () => {
+    const userInput = document.getElementById('user-input');
+    chatSocket.send(JSON.stringify({ message: userInput.value }));
+    userInput.value = '';
+});
+      --- End of chat.js ---
+
+      File: main.js
+      --- Start of main.js ---
+document.addEventListener('DOMContentLoaded', () => {
+    const socket = io();
+
+    // Helper function to safely get elements
+    function $(id) {
+        return document.getElementById(id);
+    }
+
+    // Device status
+    const deviceStatus = $('device-status');
+
+    // Messages
+    const messageList = $('messages');
+    const userInput = $('user-input');
+    const sendMessage = $('send-message');
+
+    // Alarms
+    const alarmList = $('alarm-list');
+    const addAlarmForm = $('add-alarm-form');
+
+    // Quotes
+    const quoteList = $('quote-list');
+    const addQuoteForm = $('add-quote-form');
+
+    // Todos
+    const todoList = $('todo-list');
+    const newTodo = $('new-todo');
+    const addTodo = $('add-todo');
+
+    // Music
+    const playMusicForm = $('play-music-form');
+    const pauseButton = $('pause-button');
+    const resumeButton = $('resume-button');
+    const stopButton = $('stop-button');
+    const nextButton = $('next-button');
+    const previousButton = $('previous-button');
+
+    // Radio
+    const playRadio = $('play-radio');
+    const stopRadio = $('stop-radio');
+
+    // Logs
+    const logEntries = $('log-entries');
+    const toggleLogs = $('toggle-logs');
+
+    // Check if elements exist before adding event listeners
+    if (toggleLogs) {
+        toggleLogs.addEventListener('click', () => {
+            logEntries.classList.toggle('hidden');
+        });
+    }
+
+    if (sendMessage) {
+        sendMessage.addEventListener('click', () => {
+            const message = userInput.value.trim();
+            if (message) {
+                socket.emit('message', { type: 'message', data: message });
+                userInput.value = '';
+            }
+        });
+    }
+
+    if (addAlarmForm) {
+        addAlarmForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const time = $('alarm-time').value;
+            const message = $('alarm-message').value.trim();
+            if (time && message) {
+                socket.emit('message', { type: 'add_alarm', data: { time, message } });
+                addAlarmForm.reset();
+            }
+        });
+    }
+
+    if (addQuoteForm) {
+        addQuoteForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const text = $('quote-text').value.trim();
+            const author = $('quote-author').value.trim();
+            if (text && author) {
+                socket.emit('message', { type: 'add_quote', data: { text, author } });
+                addQuoteForm.reset();
+            }
+        });
+    }
+
+    if (addTodo) {
+        addTodo.addEventListener('click', () => {
+            const todo = newTodo.value.trim();
+            if (todo) {
+                socket.emit('message', { type: 'add_todo', data: todo });
+                newTodo.value = '';
+            }
+        });
+    }
+
+    if (playMusicForm) {
+        playMusicForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const uri = $('music-uri').value.trim();
+            if (uri) {
+                socket.emit('message', { type: 'play_music', data: uri });
+                playMusicForm.reset();
+            }
+        });
+    }
+
+    if (pauseButton) {
+        pauseButton.addEventListener('click', () => socket.emit('message', { type: 'pause_music' }));
+    }
+
+    if (resumeButton) {
+        resumeButton.addEventListener('click', () => socket.emit('message', { type: 'resume_music' }));
+    }
+
+    if (stopButton) {
+        stopButton.addEventListener('click', () => socket.emit('message', { type: 'stop_music' }));
+    }
+
+    if (nextButton) {
+        nextButton.addEventListener('click', () => socket.emit('message', { type: 'next_track' }));
+    }
+
+    if (previousButton) {
+        previousButton.addEventListener('click', () => socket.emit('message', { type: 'previous_track' }));
+    }
+
+    if (playRadio) {
+        playRadio.addEventListener('click', () => socket.emit('message', { type: 'play_radio' }));
+    }
+
+    if (stopRadio) {
+        stopRadio.addEventListener('click', () => socket.emit('message', { type: 'stop_radio' }));
+    }
+
+    // Handle Socket.IO messages
+    socket.on('message', (data) => {
+        switch (data.type) {
+            case 'status':
+                deviceStatus.textContent = `Device Status: ${data.data}`;
+                break;
+            case 'message':
+                const messageElement = document.createElement('div');
+                messageElement.textContent = data.data;
+                messageList.appendChild(messageElement);
+                break;
+            case 'alarm':
+                const alarmItem = document.createElement('li');
+                alarmItem.textContent = `${data.time}: ${data.message}`;
+                alarmList.appendChild(alarmItem);
+                break;
+            case 'quote':
+                const quoteItem = document.createElement('li');
+                quoteItem.textContent = `"${data.text}" - ${data.author}`;
+                quoteList.appendChild(quoteItem);
+                break;
+            case 'todo':
+                const todoItem = document.createElement('li');
+                todoItem.textContent = data.data;
+                todoList.appendChild(todoItem);
+                break;
+            case 'log':
+                const logEntry = document.createElement('div');
+                logEntry.textContent = data.data;
+                logEntries.appendChild(logEntry);
+                break;
+        }
+    });
+
+    // Handle wake word detection
+    socket.on('wakeWordDetected', (data) => {
+        const wakeWordMessage = document.createElement('div');
+        wakeWordMessage.classList.add('system-message');
+        wakeWordMessage.textContent = data.message;
+        messageList.appendChild(wakeWordMessage);
+        messageList.scrollTop = messageList.scrollHeight;
+    });
+
+    // Handle transcription result
+    socket.on('transcriptionResult', (data) => {
+        const transcriptionMessage = document.createElement('div');
+        transcriptionMessage.classList.add('assistant-message');
+        transcriptionMessage.textContent = data.message;
+        messageList.appendChild(transcriptionMessage);
+        messageList.scrollTop = messageList.scrollHeight;
+    });
+
+    // Handle errors
+    socket.on('error', (data) => {
+        const errorMessage = document.createElement('div');
+        errorMessage.classList.add('error-message');
+        errorMessage.textContent = data.message;
+        messageList.appendChild(errorMessage);
+        messageList.scrollTop = messageList.scrollHeight;
+    });
+
+    socket.on('connect', () => {
+        console.log('Socket.IO Connected');
+        deviceStatus.textContent = 'Device Status: Online';
+    });
+
+    socket.on('disconnect', () => {
+        console.warn('Socket.IO Disconnected');
+        deviceStatus.textContent = 'Device Status: Offline';
+    });
+
+    socket.on('error', (error) => {
+        console.error('Socket.IO Error:', error);
+    });
+});      --- End of main.js ---
+
+      File: mopidy.js
+      --- Start of mopidy.js ---
+
+// mopidy.js
+const Mopidy = require('mopidy');
+
+class MopidyClient {
+    constructor() {
+        this.mopidy = new Mopidy({
+            webSocketUrl: "ws://localhost:6680/mopidy/ws/",
+            callingConvention: "by-position-or-by-name"
+        });
+
+        this.mopidy.on('state:online', () => {
+            console.log('Mopidy is online');
+        });
+
+        this.mopidy.on('state:offline', () => {
+            console.log('Mopidy is offline');
+        });
+    }
+
+    play(uri) {
+        return this.mopidy.tracklist.clear()
+            .then(() => this.mopidy.tracklist.add({ uri: uri }))
+            .then(() => this.mopidy.playback.play())
+            .catch(console.error);
+    }
+
+    pause() {
+        return this.mopidy.playback.pause().catch(console.error);
+    }
+
+    resume() {
+        return this.mopidy.playback.resume().catch(console.error);
+    }
+
+    stop() {
+        return this.mopidy.playback.stop().catch(console.error);
+    }
+
+    next() {
+        return this.mopidy.playback.next().catch(console.error);
+    }
+
+    previous() {
+        return this.mopidy.playback.previous().catch(console.error);
+    }
+
+    getTracklist() {
+        return this.mopidy.tracklist.getTracks().catch(console.error);
+    }
+}
+
+module.exports = MopidyClient;
+      --- End of mopidy.js ---
+
+      File: quote.js
+      --- Start of quote.js ---
+
+document.addEventListener('DOMContentLoaded', () => {
+    const quoteButton = document.getElementById('get-quote');
+
+    quoteButton.addEventListener('click', () => {
+        fetch('/api/quotes/random')
+            .then(response => response.json())
+            .then(data => {
+                const quoteElement = document.getElementById('quote');
+                quoteElement.innerText = data.quote;
+            })
+            .catch(error => {
+                console.error('Error fetching quote:', error);
+            });
+    });
+});
+      --- End of quote.js ---
+
+      File: weather.js
+      --- Start of weather.js ---
+
+document.addEventListener('DOMContentLoaded', () => {
+    const weatherWidget = document.getElementById('weather-widget');
+
+    fetch('/api/weather')
+        .then(response => response.json())
+        .then(data => {
+            weatherWidget.innerText = `Current weather: ${data.weather}`;
+        })
+        .catch(error => {
+            weatherWidget.innerText = 'Failed to load weather data';
+        });
+});
+      --- End of weather.js ---
+
+  Directory: routes
+    File: api.js
+    --- Start of api.js ---
+
+// api.js
+const express = require('express');
+const router = express.Router();
+
+const alarmController = require('./controllers/alarmController');
+const quoteController = require('./controllers/quoteController');
+const mopidyController = require('./controllers/mopidyController');
+
+// Use controllers
+router.use('/alarms', alarmController);
+router.use('/quotes', quoteController);
+router.use('/mopidy', mopidyController);
+
+module.exports = router;
+    --- End of api.js ---
+
+    File: index.js
+    --- Start of index.js ---
+const express = require('express');
+const router = express.Router();
+
+router.get('/', (req, res) => {
+  res.render('index');
+});
+
+module.exports = router;
+    --- End of index.js ---
+
+  Directory: services
+    File: mopidyService.js
+    --- Start of mopidyService.js ---
+
+// mopidyService.js
+const MopidyClient = require('../mopidy');
+
+class MopidyService {
+    constructor() {
+        this.mopidy = new MopidyClient();
+    }
+
+    async play(uri) {
+        try {
+            await this.mopidy.play(uri);
+            return { status: 'success', message: 'Playing' };
+        } catch (error) {
+            return { status: 'error', message: error.message };
+        }
+    }
+
+    async pause() {
+        try {
+            await this.mopidy.pause();
+            return { status: 'success', message: 'Paused' };
+        } catch (error) {
+            return { status: 'error', message: error.message };
+        }
+    }
+
+    async resume() {
+        try {
+            await this.mopidy.resume();
+            return { status: 'success', message: 'Resumed' };
+        } catch (error) {
+            return { status: 'error', message: error.message };
+        }
+    }
+
+    async stop() {
+        try {
+            await this.mopidy.stop();
+            return { status: 'success', message: 'Stopped' };
+        } catch (error) {
+            return { status: 'error', message: error.message };
+        }
+    }
+
+    async next() {
+        try {
+            await this.mopidy.next();
+            return { status: 'success', message: 'Next track' };
+        } catch (error) {
+            return { status: 'error', message: error.message };
+        }
+    }
+
+    async previous() {
+        try {
+            await this.mopidy.previous();
+            return { status: 'success', message: 'Previous track' };
+        } catch (error) {
+            return { status: 'error', message: error.message };
+        }
+    }
+
+    async getTracklist() {
+        try {
+            const tracklist = await this.mopidy.getTracklist();
+            return { status: 'success', data: tracklist };
+        } catch (error) {
+            return { status: 'error', message: error.message };
+        }
+    }
+}
+
+module.exports = MopidyService;
+    --- End of mopidyService.js ---
+
+  File: socket.js
+  --- Start of socket.js ---
+const socketIo = require('socket.io');
+
+let io;
+
+module.exports = {
+    init: (server) => {
+        io = socketIo(server);
+        return io;
+    },
+    get io() {
+        if (!io) {
+            throw new Error('Socket.io not initialized!');
+        }
+        return io;
+    }
+};  --- End of socket.js ---
+
+  Directory: utils
+    File: logger.js
+    --- Start of logger.js ---
+function logWithTimestamp(message) {
+    const timestamp = new Date().toISOString();
+    console.log(`[${timestamp}] ${message}`);
+}
+
+module.exports = { logWithTimestamp };    --- End of logger.js ---
+
+    File: polly_util.js
+    --- Start of polly_util.js ---
+const AWS = require('aws-sdk');
+const Stream = require('stream');
+const { exec, spawn } = require('child_process');
+const util = require('util');
+const execPromise = util.promisify(exec);
+
+const Polly = new AWS.Polly({
+    region: 'us-east-1'
+});
+
+async function synthesizeSpeech(text) {
+    return new Promise((resolve, reject) => {
+        const params = {
+            Text: text,
+            OutputFormat: 'pcm',
+            VoiceId: 'Joanna'
+        };
+
+        Polly.synthesizeSpeech(params, async (err, data) => {
+            if (err) {
+                reject(err);
+            } else if (data && data.AudioStream instanceof Buffer) {
+                try {
+                    const audioBuffer = data.AudioStream;
+                    const audioDuration = audioBuffer.length / 32000; // assuming 16-bit PCM at 16kHz
+
+                    console.log(`Starting strobe effect for ${audioDuration} seconds...`);
+
+                    const strobeProcess = spawn('python3', ['scripts/lights.py', 'strobe', audioDuration.toString()]);
+                    
+                    const bufferStream = new Stream.PassThrough();
+                    bufferStream.end(audioBuffer);
+
+                    const player = exec('aplay -f S16_LE -r 16000');
+                    bufferStream.pipe(player.stdin);
+
+                    player.on('close', async () => {
+                        console.log('Stopping strobe effect...');
+                        strobeProcess.kill(); // Ensure strobe process is stopped
+                        await execPromise('python3 scripts/lights.py off');
+                        resolve();
+                    });
+
+                    player.on('error', async (error) => {
+                        console.log('Error during audio playback. Stopping strobe effect...');
+                        strobeProcess.kill(); // Ensure strobe process is stopped
+                        await execPromise('python3 scripts/lights.py off');
+                        reject(error);
+                    });
+                } catch (error) {
+                    console.log('Error during TTS. Stopping strobe effect...');
+                    await execPromise('python3 scripts/lights.py off');
+                    reject(error);
+                }
+            }
+        });
+    });
+}
+
+async function playSound(filePath) {
+    return new Promise((resolve, reject) => {
+        const player = exec(`aplay ${filePath}`);
+
+        player.on('close', () => resolve());
+        player.on('error', (error) => reject(error));
+        player.stdout.on('data', (data) => console.log(`stdout: ${data}`));
+        player.stderr.on('data', (data) => console.error(`stderr: ${data}`));
+    });
+}
+
+module.exports = { synthesizeSpeech, playSound };    --- End of polly_util.js ---
+
+  Directory: views
+    File: index.ejs
+    --- Start of index.ejs ---
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Voice Assistant Interface</title>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/css/styles.css">
+    <link rel="stylesheet" href="/css/themes.css">
+</head>
+<body>
+    <header>
+        <h1>Smart Home Dashboard</h1>
+        <div id="time-display"></div>
+        <button id="toggle-theme">Toggle Theme</button>
+    </header>
+    <div class="container">
+        <div class="column left-column">
+            <div class="widget">
+                <div class="device-status" id="device-status">Device Status: Offline</div>
+            </div>
+            <div class="widget controls">
+                <button id="play-radio">Play Radio</button>
+                <button id="stop-radio">Stop Radio</button>
+            </div>
+        </div>
+        <div class="column middle-column">
+            <div class="widget chat-box" id="chat-box">
+                <h3>Chat</h3>
+                <div class="messages" id="messages"></div>
+                <div class="user-input">
+                    <input type="text" id="user-input" placeholder="Type your message...">
+                    <button id="send-message">Send</button>
+                </div>
+            </div>
+            <div class="widget">
+                <h3>Weather</h3>
+                <div class="weather-widget" id="weather-widget">Loading weather...</div>
+            </div>
+            <div class="widget">
+                <h3>To-Do List</h3>
+                <ul id="todo-list"></ul>
+                <input type="text" id="new-todo" placeholder="New to-do">
+                <button id="add-todo">Add</button>
+            </div>
+        </div>
+        <div class="column right-column">
+            <div class="widget">
+                <h3>Recent Affirmations</h3>
+                <div id="affirmations"></div>
+            </div>
+            <div class="widget">
+                <h3>System Logs</h3>
+                <button id="toggle-logs">Show Logs</button>
+                <div id="logs" class="hidden"></div>
+            </div>
+            <div class="widget">
+                <h3>Music Control</h3>
+                <form id="play-music-form">
+                    <input type="text" id="music-uri" placeholder="URI" required>
+                    <button type="submit">Play</button>
+                </form>
+                <button id="pause-button">Pause</button>
+                <button id="resume-button">Resume</button>
+                <button id="stop-button">Stop</button>
+                <button id="next-button">Next</button>
+                <button id="previous-button">Previous</button>
+            </div>
+        </div>
+    </div>
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="/js/main.js"></script>
+    <script>
+        // Function to update the current time
+        function updateTime() {
+            const now = new Date();
+            const hours = String(now.getHours()).padStart(2, '0');
+            const minutes = String(now.getMinutes()).padStart(2, '0');
+            const seconds = String(now.getSeconds()).padStart(2, '0');
+            const timeString = `${hours}:${minutes}:${seconds}`;
+            document.getElementById('time-display').textContent = timeString;
+        }
+
+        // Update time every second
+        setInterval(updateTime, 1000);
+        // Initial call to display time immediately
+        updateTime();
+
+        // Function to toggle theme
+        function toggleTheme() {
+            document.body.classList.toggle('dark');
+            localStorage.setItem('theme', document.body.classList.contains('dark') ? 'dark' : 'light');
+        }
+
+        // Function to set theme based on time of day
+        function setThemeBasedOnTime() {
+            const now = new Date();
+            const hour = now.getHours();
+            if (hour >= 18 || hour < 6) {
+                document.body.classList.add('dark');
+            } else {
+                document.body.classList.remove('dark');
+            }
+        }
+
+        // Event listener for theme toggle button
+        document.getElementById('toggle-theme').addEventListener('click', toggleTheme);
+
+        // Set theme on page load
+        document.addEventListener('DOMContentLoaded', () => {
+            const savedTheme = localStorage.getItem('theme');
+            if (savedTheme) {
+                document.body.classList.toggle('dark', savedTheme === 'dark');
+            } else {
+                setThemeBasedOnTime();
+            }
+        });
+    </script>
+</body>
+</html>
+    --- End of index.ejs ---
+

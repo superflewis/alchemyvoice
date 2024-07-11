@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Voice Assistant Interface</title>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/css/styles.css">
+    <link rel="stylesheet" href="/css/themes.css">
+</head>
+<body>
+    <header>
+        <h1>Smart Home Dashboard</h1>
+        <div id="time-display"></div>
+        <button id="toggle-theme">Toggle Theme</button>
+    </header>
+    <div class="container">
+        <div class="column left-column">
+            <div class="widget">
+                <div class="device-status" id="device-status">Device Status: Offline</div>
+            </div>
+            <div class="widget controls">
+                <button id="play-radio">Play Radio</button>
+                <button id="stop-radio">Stop Radio</button>
+            </div>
+        </div>
+        <div class="column middle-column">
+            <div class="widget chat-box" id="chat-box">
+                <h3>Chat</h3>
+                <div class="messages" id="messages"></div>
+                <div class="user-input">
+                    <input type="text" id="user-input" placeholder="Type your message...">
+                    <button id="send-message">Send</button>
+                </div>
+            </div>
+            <div class="widget">
+                <h3>Weather</h3>
+                <div class="weather-widget" id="weather-widget">Loading weather...</div>
+            </div>
+            <div class="widget">
+                <h3>To-Do List</h3>
+                <ul id="todo-list"></ul>
+                <input type="text" id="new-todo" placeholder="New to-do">
+                <button id="add-todo">Add</button>
+            </div>
+        </div>
+        <div class="column right-column">
+            <div class="widget">
+                <h3>Recent Affirmations</h3>
+                <div id="affirmations"></div>
+            </div>
+            <div class="widget">
+                <h3>System Logs</h3>
+                <button id="toggle-logs">Show Logs</button>
+                <div id="logs" class="hidden"></div>
+            </div>
+            <div class="widget">
+                <h3>Music Control</h3>
+                <form id="play-music-form">
+                    <input type="text" id="music-uri" placeholder="URI" required>
+                    <button type="submit">Play</button>
+                </form>
+                <button id="pause-button">Pause</button>
+                <button id="resume-button">Resume</button>
+                <button id="stop-button">Stop</button>
+                <button id="next-button">Next</button>
+                <button id="previous-button">Previous</button>
+            </div>
+        </div>
+    </div>
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="/js/main.js"></script>
+    <script>
+        // Function to update the current time
+        function updateTime() {
+            const now = new Date();
+            const hours = String(now.getHours()).padStart(2, '0');
+            const minutes = String(now.getMinutes()).padStart(2, '0');
+            const seconds = String(now.getSeconds()).padStart(2, '0');
+            const timeString = `${hours}:${minutes}:${seconds}`;
+            document.getElementById('time-display').textContent = timeString;
+        }
+
+        // Update time every second
+        setInterval(updateTime, 1000);
+        // Initial call to display time immediately
+        updateTime();
+
+        // Function to toggle theme
+        function toggleTheme() {
+            document.body.classList.toggle('dark');
+            localStorage.setItem('theme', document.body.classList.contains('dark') ? 'dark' : 'light');
+        }
+
+        // Function to set theme based on time of day
+        function setThemeBasedOnTime() {
+            const now = new Date();
+            const hour = now.getHours();
+            if (hour >= 18 || hour < 6) {
+                document.body.classList.add('dark');
+            } else {
+                document.body.classList.remove('dark');
+            }
+        }
+
+        // Event listener for theme toggle button
+        document.getElementById('toggle-theme').addEventListener('click', toggleTheme);
+
+        // Set theme on page load
+        document.addEventListener('DOMContentLoaded', () => {
+            const savedTheme = localStorage.getItem('theme');
+            if (savedTheme) {
+                document.body.classList.toggle('dark', savedTheme === 'dark');
+            } else {
+                setThemeBasedOnTime();
+            }
+        });
+    </script>
+</body>
+</html>
