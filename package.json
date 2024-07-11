@@ -12,6 +12,7 @@
     "@picovoice/pvrecorder-node": "*",
     "aws-sdk": "^2.1656.0",
     "axios": "^1.7.2",
+    "ejs": "^3.1.10",
     "express": "*",
     "node-microphone": "*",
     "socket.io": "^4.7.5"
