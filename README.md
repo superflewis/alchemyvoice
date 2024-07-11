@@ -1,6 +1,6 @@
 # AlchemyVoice
 
-AlchemyVoice 1is a voice assistant project designed to transform spoken commands into actionable tasks, allowing users to interact with their environment as modern-day alchemists. By leveraging cutting-edge AI technologies, AlchemyVoice enables seamless voice interaction and control over built-in features on the Adafruit Voice Bonnet.
+AlchemyVoice 2is a voice assistant project designed to transform spoken commands into actionable tasks, allowing users to interact with their environment as modern-day alchemists. By leveraging cutting-edge AI technologies, AlchemyVoice enables seamless voice interaction and control over built-in features on the Adafruit Voice Bonnet.
 
 ## Main Features
 - **Wake Word Detection:** Utilizes Picovoice's Porcupine for detecting the wake word, enabling hands-free activation.
