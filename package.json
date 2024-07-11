@@ -4,7 +4,7 @@
   "description": "Voice Assistant Project",
   "main": "app.js",
   "scripts": {
-    "start": "node src/app.js"
+    "start": "npm install && node src/app.js"
   },
   "dependencies": {
     "@google-cloud/speech": "*",
