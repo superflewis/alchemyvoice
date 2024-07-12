@@ -1,21 +1,27 @@
-Packages used:
+# Packages used:
 @google-cloud/speech *
 @picovoice/porcupine-node *
 @picovoice/pvrecorder-node *
 aws-sdk ^2.1656.0
 axios ^1.7.2
+ejs ^3.1.10
 express *
 node-microphone *
+socket.io ^4.7.5
 
-File: combine_files.sh
+# File: combine_files.sh
 --- Start of combine_files.sh ---
+```
 #!/bin/bash
 
 # Define the output file
 OUTPUT_FILE="project_combined.txt"
 
-# Clear the output file if it already exists
-> $OUTPUT_FILE
+# Delete the output file if it already exists
+rm -f "$OUTPUT_FILE"
+
+# Get the absolute path of the current directory
+CURRENT_DIR=$(pwd)
 
 # Function to check if a file is a text file
 is_text_file() {
@@ -31,41 +37,52 @@ combine_files() {
     local indent=$2
     
     for item in "$dir"/*; do
-        if [ -d "$item" ]; then
-            echo "${indent}Directory: $(basename "$item")" >> $OUTPUT_FILE
-            combine_files "$item" "$indent  "
-        elif [ -f "$item" ] && is_text_file "$item"; then
-            echo "${indent}File: $(basename "$item")" >> $OUTPUT_FILE
-            echo "${indent}--- Start of $(basename "$item") ---" >> $OUTPUT_FILE
-            
-            if [ -r "$item" ]; then
-                cat "$item" >> $OUTPUT_FILE
-            else
-                echo "${indent}WARNING: No read permission for this file" >> $OUTPUT_FILE
+        # Exclude the output file and package-lock.json to prevent self-inclusion and large size
+        if [[ "$item" == "$CURRENT_DIR/$OUTPUT_FILE" ]] || [[ "$(basename "$item")" == "package-lock.json" ]]; then
+            continue
+        fi
+        
+        # Check if the item is within the current project directory
+        if [[ "$item" == "$CURRENT_DIR"/* ]]; then
+            if [ -d "$item" ]; then
+                echo "${indent}# Directory: $(basename "$item")" >> "$OUTPUT_FILE"
+                combine_files "$item" "$indent  "
+            elif [ -f "$item" ] && is_text_file "$item"; then
+                echo "${indent}# File: $(basename "$item")" >> "$OUTPUT_FILE"
+                echo "${indent}--- Start of $(basename "$item") ---" >> "$OUTPUT_FILE"
+                
+                if [ -r "$item" ]; then
+                    echo "${indent}\`\`\`" >> "$OUTPUT_FILE"
+                    cat "$item" >> "$OUTPUT_FILE"
+                    echo "${indent}\`\`\`" >> "$OUTPUT_FILE"
+                else
+                    echo "${indent}WARNING: No read permission for this file" >> "$OUTPUT_FILE"
+                fi
+                
+                echo "${indent}--- End of $(basename "$item") ---" >> "$OUTPUT_FILE"
+                echo >> "$OUTPUT_FILE"
             fi
-            
-            echo "${indent}--- End of $(basename "$item") ---" >> $OUTPUT_FILE
-            echo >> $OUTPUT_FILE
         fi
     done
 }
 
 # List packages from package.json
 if [ -f "package.json" ]; then
-    echo "Packages used:" >> $OUTPUT_FILE
-    jq -r 'if .dependencies then .dependencies | to_entries[] | "\(.key) \(.value)" else empty end, if .devDependencies then .devDependencies | to_entries[] | "\(.key) \(.value)" else empty end' package.json >> $OUTPUT_FILE
-    echo >> $OUTPUT_FILE
+    echo "# Packages used:" >> "$OUTPUT_FILE"
+    jq -r 'if .dependencies then .dependencies | to_entries[] | "\(.key) \(.value)" else empty end, if .devDependencies then .devDependencies | to_entries[] | "\(.key) \(.value)" else empty end' package.json >> "$OUTPUT_FILE"
+    echo >> "$OUTPUT_FILE"
 fi
 
 # Start combining files from the current directory
-combine_files "." ""
+combine_files "$CURRENT_DIR" ""
 
 echo "Files and folder structure have been combined into $OUTPUT_FILE"
+```
 --- End of combine_files.sh ---
 
-Directory: database
-File: package.json
+# File: package.json
 --- Start of package.json ---
+```
 {
   "name": "voice-assistant",
   "version": "1.0.0",
@@ -80,49 +97,72 @@ File: package.json
     "@picovoice/pvrecorder-node": "*",
     "aws-sdk": "^2.1656.0",
     "axios": "^1.7.2",
+    "ejs": "^3.1.10",
     "express": "*",
-    "node-microphone": "*"
+    "node-microphone": "*",
+    "socket.io": "^4.7.5"
   }
 }
+```
 --- End of package.json ---
 
-File: project_combined.txt
---- Start of project_combined.txt ---
---- End of project_combined.txt ---
-
-File: README.md
+# File: README.md
 --- Start of README.md ---
-# Voice Assistant Project
+```
+# AlchemyVoice
 
-This project implements a voice assistant using Node.js with Express on a Raspberry Pi.
+AlchemyVoice 2is a voice assistant project designed to transform spoken commands into actionable tasks, allowing users to interact with their environment as modern-day alchemists. By leveraging cutting-edge AI technologies, AlchemyVoice enables seamless voice interaction and control over built-in features on the Adafruit Voice Bonnet.
 
-## Prerequisites
+## Main Features
+- **Wake Word Detection:** Utilizes Picovoice's Porcupine for detecting the wake word, enabling hands-free activation.
+- **Speech-to-Text:** Uses Google Cloud Speech API for transcribing spoken commands into text, facilitating natural language interactions.
+- **Built-in Light Controls:** Includes scripts and controllers for managing the built-in lights on the Adafruit Voice Bonnet.
+- **Web Interface:** Provides a web interface for user interactions and status display, offering a centralized hub for managing tasks.
 
-- Node.js
-- Raspberry Pi with a microphone (device: plughw:3,0)
-- Google Cloud Speech API credentials
-- Porcupine access key from Picovoice
-
-## Installation
-
-1. Clone the repository.
-2. Install dependencies: `npm install`
+## Installation and Usage
+1. Clone the repository:
+    ```bash
+    git clone https://github.com/yourusername/alchemyvoice.git
+    cd alchemyvoice
+    ```
+2. Install dependencies:
+    ```bash
+    npm install
+    ```
 3. Configure the `src/config/config.js` file with your access keys and credentials.
+4. Start the server:
+    ```bash
+    npm start
+    ```
+5. Access the web interface at `http://localhost:3000`.
 
-## Usage
+## Directory Structure
+- **src/**: Contains the main application logic.
+- **config/**: Configuration files for various services and APIs.
+- **controllers/**: Handles the logic for different features like alarms, audio, and wake word detection.
+- **public/**: Contains front-end assets like HTML, CSS, and JavaScript files.
+- **scripts/**: Includes Python scripts for additional functionalities like controlling lights.
 
-1. Start the server: `npm start`
-2. Say the wake word "Computer" to activate audio recording.
-3. The recorded audio will be transcribed using Google Cloud Speech API.
-4. The transcription result will be logged in the console.
+## Dependencies
+- `@google-cloud/speech`
+- `@picovoice/porcupine-node`
+- `aws-sdk`
+- `axios`
+- `express`
+- `node-microphone`
+
+## Platform
+AlchemyVoice is built to run on a Raspberry Pi, utilizing the Adafruit Voice Bonnet for audio input and output, as well as controlling built-in lights. The project harnesses the power of AI to provide intuitive voice-based interactions.
 
 ## License
+This project is licensed under the MIT License.
+```
+--- End of README.md ---
 
-This project is licensed under the MIT License.--- End of README.md ---
-
-Directory: scripts
-  File: lights.py
+# Directory: scripts
+  # File: lights.py
   --- Start of lights.py ---
+  ```
 import sys
 import time
 import board
@@ -134,54 +174,55 @@ DOTSTAR_CLOCK = board.D6
 dots = adafruit_dotstar.DotStar(DOTSTAR_CLOCK, DOTSTAR_DATA, 3, brightness=0.2, pixel_order=adafruit_dotstar.RBG)
 
 def set_color(color):
-    print(f"Setting color: {color}")
     for i in range(len(dots)):
         dots[i] = color
     dots.show()
 
-def wheel(pos):
-    if pos < 0 or pos > 255:
-        return (0, 0, 0)
-    if pos < 85:
-        return (255 - pos * 3, pos * 3, 0)
-    if pos < 170:
-        pos -= 85
-        return (0, 255 - pos * 3, pos * 3)
-    pos -= 170
-    return (pos * 3, 0, 255 - pos * 3)
-
-def strobe_effect(duration=1):
+def pulse_effect(color, duration=5):
     start_time = time.time()
-    print(f'Start time: {start_time:.2f}')
     while time.time() - start_time < duration:
-        elapsed_time = time.time() - start_time
-        print(f'Elapsed time: {elapsed_time:.2f} seconds', end='\r')
-        j = int((elapsed_time * 255 / duration) % 256)
-        for i in range(len(dots)):
-            rc_index = (i * 256 // len(dots)) + j * 5
-            dots[i] = wheel(rc_index & 255)
-        dots.show()
-        time.sleep(0.01)
-    end_time = time.time()
+        for brightness in range(0, 255, 5):
+            dots.brightness = brightness / 255.0
+            set_color(color)
+            time.sleep(0.02)
+        for brightness in range(255, 0, -5):
+            dots.brightness = brightness / 255.0
+            set_color(color)
+            time.sleep(0.02)
     set_color((0, 0, 0))
-    print(f'\nEnd time: {end_time:.2f}')
-    print(f'Total duration: {end_time - start_time:.2f} seconds')
+
+def strobe_effect(color, duration=1):
+    start_time = time.time()
+    while time.time() - start_time < duration:
+        set_color(color)
+        time.sleep(0.1)
+        set_color((0, 0, 0))
+        time.sleep(0.1)
+    set_color((0, 0, 0))
 
 if __name__ == "__main__":
     command = sys.argv[1]
     if command == "solid":
         color = tuple(map(int, sys.argv[2:]))
         set_color(color)
+    elif command == "pulse":
+        color = tuple(map(int, sys.argv[2:]))
+        duration = float(sys.argv[3]) if len(sys.argv) > 3 else 5
+        pulse_effect(color, duration)
     elif command == "strobe":
-        duration = float(sys.argv[2]) if len(sys.argv) > 2 else 1
-        strobe_effect(duration=duration)
+        color = tuple(map(int, sys.argv[2:]))
+        duration = float(sys.argv[3]) if len(sys.argv) > 3 else 1
+        strobe_effect(color, duration)
     elif command == "off":
-        set_color((0, 0, 0))  --- End of lights.py ---
+        set_color((0, 0, 0))
+  ```
+  --- End of lights.py ---
 
-Directory: sounds
-Directory: src
-  File: app.js
+# Directory: sounds
+# Directory: src
+  # File: app.js
   --- Start of app.js ---
+  ```
 const express = require('express');
 const http = require('http');
 const socket = require('./socket');
@@ -189,6 +230,7 @@ const indexRouter = require('./routes/index');
 const wakeWordController = require('./controllers/wakeWordController');
 const { scheduleHourlyAnnouncement } = require('./controllers/timeAnnouncerController');
 const { logWithTimestamp } = require('./utils/logger');
+const { synthesizeSpeech } = require('./utils/polly_util');
 const path = require('path');
 
 logWithTimestamp('Initializing application...');
@@ -215,8 +257,16 @@ app.use((req, res, next) => {
 });
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
+server.listen(PORT, async () => {
   logWithTimestamp(`Server is running on port ${PORT}`);
+  
+  // Synthesize and play the startup message
+  try {
+    await synthesizeSpeech('System started.');
+    logWithTimestamp('Startup message played successfully');
+  } catch (error) {
+    logWithTimestamp(`Error playing startup message: ${error.message}`);
+  }
 });
 
 // Initialize wake word detection
@@ -230,11 +280,14 @@ wakeWordController.initializeWakeWordDetection()
 
 // Schedule hourly time announcements
 scheduleHourlyAnnouncement();
-logWithTimestamp('Hourly announcements scheduled');  --- End of app.js ---
+logWithTimestamp('Hourly announcements scheduled');
+  ```
+  --- End of app.js ---
 
-  Directory: config
-    File: config.js
+  # Directory: config
+    # File: config.js
     --- Start of config.js ---
+    ```
 module.exports = {
   PORCUPINE_ACCESS_KEY: 'M3yNxgXslqTlFyd9Krh4z0AGCT7r7P70II12AuHhQfgO8Zu+ykZL6w==',
   AUDIO_DEVICE: 'default',
@@ -244,11 +297,13 @@ module.exports = {
     languageCode: 'en-US',
   },
   GOOGLE_APPLICATION_CREDENTIALS: '/home/williew/leafy-firmament-425414-s9-0ee1457e29e4.json',
-};    --- End of config.js ---
+};    ```
+    --- End of config.js ---
 
-  Directory: controllers
-    File: alarmController.js
+  # Directory: controllers
+    # File: alarmController.js
     --- Start of alarmController.js ---
+    ```
 
 // alarmController.js
 const express = require('express');
@@ -288,10 +343,12 @@ router.delete('/:id', async (req, res) => {
 });
 
 module.exports = router;
+    ```
     --- End of alarmController.js ---
 
-    File: audioController.js
+    # File: audioController.js
     --- Start of audioController.js ---
+    ```
 const Microphone = require('node-microphone');
 const config = require('../config/config');
 const { logWithTimestamp } = require('../utils/logger');
@@ -354,10 +411,12 @@ module.exports = {
     startRecording,
     stopRecording,
 };
+    ```
     --- End of audioController.js ---
 
-    File: mopidyController.js
+    # File: mopidyController.js
     --- Start of mopidyController.js ---
+    ```
 
 // mopidyController.js
 const express = require('express');
@@ -431,10 +490,12 @@ router.get('/tracklist', async (req, res) => {
 });
 
 module.exports = router;
+    ```
     --- End of mopidyController.js ---
 
-    File: quoteController.js
+    # File: quoteController.js
     --- Start of quoteController.js ---
+    ```
 
 // quoteController.js
 const express = require('express');
@@ -474,10 +535,12 @@ router.delete('/:id', async (req, res) => {
 });
 
 module.exports = router;
+    ```
     --- End of quoteController.js ---
 
-    File: sttController.js
+    # File: sttController.js
     --- Start of sttController.js ---
+    ```
 const speech = require('@google-cloud/speech');
 const config = require('../config/config');
 const audioController = require('./audioController');
@@ -549,10 +612,54 @@ const transcribeAudio = () => {
 
 module.exports = {
     transcribeAudio,
-};    --- End of sttController.js ---
+};    ```
+    --- End of sttController.js ---
 
-    File: timeAnnouncerController.js
+    # File: testPvRecorder.js
+    --- Start of testPvRecorder.js ---
+    ```
+const { PvRecorder } = require('@picovoice/pvrecorder-node');
+
+async function testPvRecorder(device) {
+  try {
+    console.log(`Testing PvRecorder with device: ${device || 'default'}`);
+    
+    // Log available devices
+    const devices = PvRecorder.getAudioDevices();
+    console.log('Available audio devices:', devices);
+    
+    const recorder = new PvRecorder(512, device);
+    await recorder.start();
+    console.log(`PvRecorder initialized successfully with device: ${device || 'default'}`);
+    recorder.stop();
+    recorder.release();
+  } catch (error) {
+    console.error(`Error initializing PvRecorder with device ${device || 'default'}:`, error.message);
+  }
+}
+
+const devices = [
+  null,  // Default device
+  'default',
+  'monoinput',
+  'dsnooped_mono',
+  'hw:CARD=seeed2micvoicec,DEV=0',
+  'plughw:CARD=seeed2micvoicec,DEV=0',
+  'sysdefault:CARD=seeed2micvoicec',
+  'dsnoop:CARD=seeed2micvoicec,DEV=0'
+];
+
+(async () => {
+  for (const device of devices) {
+    await testPvRecorder(device);
+  }
+})();
+    ```
+    --- End of testPvRecorder.js ---
+
+    # File: timeAnnouncerController.js
     --- Start of timeAnnouncerController.js ---
+    ```
 const axios = require('axios');
 const { synthesizeSpeech } = require('../utils/polly_util');
 
@@ -615,10 +722,12 @@ function scheduleHourlyAnnouncement() {
     }, delay);
 }
 
-module.exports = { announceTime, scheduleHourlyAnnouncement };    --- End of timeAnnouncerController.js ---
+module.exports = { announceTime, scheduleHourlyAnnouncement };    ```
+    --- End of timeAnnouncerController.js ---
 
-    File: wakeWordController.js
+    # File: wakeWordController.js
     --- Start of wakeWordController.js ---
+    ```
 const { Porcupine, BuiltinKeyword } = require('@picovoice/porcupine-node');
 const { PvRecorder } = require('@picovoice/pvrecorder-node');
 const config = require('../config/config');
@@ -660,6 +769,7 @@ async function setLights(command, ...args) {
     }
 }
 
+
 const handleWakeWord = async () => {
     if (isProcessing) {
         logWithTimestamp('Already processing a command, ignoring this wake word.');
@@ -676,14 +786,14 @@ const handleWakeWord = async () => {
         const dingPath = path.join(__dirname, '..', '..', 'sounds', 'ding.wav');
         playSound(dingPath).catch(error => logWithTimestamp(`Error playing ding: ${error}`));
         
-        await setLights('strobe', 1);
+        await setLights('pulse', 0, 0, 255, 5); // Electric blue pulse effect
         
         const transcription = await sttController.transcribeAudio();
         logWithTimestamp(`Transcription: ${transcription || 'No transcription result received.'}`);
         
         socket.io.emit('transcriptionResult', { message: transcription || 'I didn\'t catch that. Could you please repeat?' });
 
-        await setLights('solid', 0, 0, 255);
+        await setLights('strobe', 0, 0, 255, 2); // Electric blue strobe effect during STT
         await new Promise(resolve => setTimeout(resolve, 2000));
         await setLights('off');
     } catch (error) {
@@ -695,10 +805,11 @@ const handleWakeWord = async () => {
     }
 };
 
+
 const initializeWakeWordDetection = async () => {
     try {
         logWithTimestamp('Starting wake word detection initialization...');
-        
+
         logWithTimestamp('Initializing Porcupine...');
         const handle = new Porcupine(
             config.PORCUPINE_ACCESS_KEY,
@@ -716,6 +827,7 @@ const initializeWakeWordDetection = async () => {
                 const pcm = await recorder.read();
                 const detectionResult = handle.process(pcm);
                 if (detectionResult >= 0) {
+                    logWithTimestamp('Wake word detected!');
                     await handleWakeWord();
                 }
             } catch (loopError) {
@@ -730,13 +842,16 @@ const initializeWakeWordDetection = async () => {
     }
 };
 
+
 module.exports = {
     initializeWakeWordDetection,
-};    --- End of wakeWordController.js ---
+};    ```
+    --- End of wakeWordController.js ---
 
-  Directory: models
-    File: alarm.js
+  # Directory: models
+    # File: alarm.js
     --- Start of alarm.js ---
+    ```
 
 // alarm.js
 const mongoose = require('mongoose');
@@ -757,14 +872,18 @@ const alarmSchema = new mongoose.Schema({
 const Alarm = mongoose.model('Alarm', alarmSchema);
 
 module.exports = Alarm;
+    ```
     --- End of alarm.js ---
 
-    File: quote.js
+    # File: quote.js
     --- Start of quote.js ---
+    ```
+    ```
     --- End of quote.js ---
 
-    File: todo.js
+    # File: todo.js
     --- Start of todo.js ---
+    ```
 
 // todo.js
 const mongoose = require('mongoose');
@@ -786,12 +905,14 @@ const todoSchema = new mongoose.Schema({
 const Todo = mongoose.model('Todo', todoSchema);
 
 module.exports = Todo;
+    ```
     --- End of todo.js ---
 
-  Directory: public
-    Directory: css
-      File: styles.css
+  # Directory: public
+    # Directory: css
+      # File: styles.css
       --- Start of styles.css ---
+      ```
 /* Base styles */
 body {
     font-family: 'Roboto', sans-serif;
@@ -919,10 +1040,12 @@ button:hover {
 
 .error-message {
     color: #cc0000;
-}      --- End of styles.css ---
+}      ```
+      --- End of styles.css ---
 
-      File: themes.css
+      # File: themes.css
       --- Start of themes.css ---
+      ```
 :root {
     --background-color: #f7f9fc; /* Light background */
     --text-color: #333; /* Dark text */
@@ -965,15 +1088,19 @@ button {
 button:hover {
     background-color: var(--button-hover);
 }
+      ```
       --- End of themes.css ---
 
-    File: index.html
+    # File: index.html
     --- Start of index.html ---
+    ```
+    ```
     --- End of index.html ---
 
-    Directory: js
-      File: alarm.js
+    # Directory: js
+      # File: alarm.js
       --- Start of alarm.js ---
+      ```
 
 document.addEventListener('DOMContentLoaded', () => {
     const alarmButton = document.getElementById('set-alarm');
@@ -998,10 +1125,12 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 });
+      ```
       --- End of alarm.js ---
 
-      File: audioVisualizer.js
+      # File: audioVisualizer.js
       --- Start of audioVisualizer.js ---
+      ```
 
 const audioContext = new (window.AudioContext || window.webkitAudioContext)();
 const analyser = audioContext.createAnalyser();
@@ -1042,10 +1171,12 @@ function draw() {
 }
 
 draw();
+      ```
       --- End of audioVisualizer.js ---
 
-      File: chat.js
+      # File: chat.js
       --- Start of chat.js ---
+      ```
 
 const chatSocket = new WebSocket('ws://localhost:3000/chat');
 
@@ -1062,10 +1193,12 @@ document.getElementById('send-message').addEventListener('click', () => {
     chatSocket.send(JSON.stringify({ message: userInput.value }));
     userInput.value = '';
 });
+      ```
       --- End of chat.js ---
 
-      File: main.js
+      # File: main.js
       --- Start of main.js ---
+      ```
 document.addEventListener('DOMContentLoaded', () => {
     const socket = io();
 
@@ -1275,10 +1408,12 @@ document.addEventListener('DOMContentLoaded', () => {
     socket.on('error', (error) => {
         console.error('Socket.IO Error:', error);
     });
-});      --- End of main.js ---
+});      ```
+      --- End of main.js ---
 
-      File: mopidy.js
+      # File: mopidy.js
       --- Start of mopidy.js ---
+      ```
 
 // mopidy.js
 const Mopidy = require('mopidy');
@@ -1332,10 +1467,12 @@ class MopidyClient {
 }
 
 module.exports = MopidyClient;
+      ```
       --- End of mopidy.js ---
 
-      File: quote.js
+      # File: quote.js
       --- Start of quote.js ---
+      ```
 
 document.addEventListener('DOMContentLoaded', () => {
     const quoteButton = document.getElementById('get-quote');
@@ -1352,10 +1489,12 @@ document.addEventListener('DOMContentLoaded', () => {
             });
     });
 });
+      ```
       --- End of quote.js ---
 
-      File: weather.js
+      # File: weather.js
       --- Start of weather.js ---
+      ```
 
 document.addEventListener('DOMContentLoaded', () => {
     const weatherWidget = document.getElementById('weather-widget');
@@ -1369,11 +1508,13 @@ document.addEventListener('DOMContentLoaded', () => {
             weatherWidget.innerText = 'Failed to load weather data';
         });
 });
+      ```
       --- End of weather.js ---
 
-  Directory: routes
-    File: api.js
+  # Directory: routes
+    # File: api.js
     --- Start of api.js ---
+    ```
 
 // api.js
 const express = require('express');
@@ -1389,10 +1530,12 @@ router.use('/quotes', quoteController);
 router.use('/mopidy', mopidyController);
 
 module.exports = router;
+    ```
     --- End of api.js ---
 
-    File: index.js
+    # File: index.js
     --- Start of index.js ---
+    ```
 const express = require('express');
 const router = express.Router();
 
@@ -1401,11 +1544,13 @@ router.get('/', (req, res) => {
 });
 
 module.exports = router;
+    ```
     --- End of index.js ---
 
-  Directory: services
-    File: mopidyService.js
+  # Directory: services
+    # File: mopidyService.js
     --- Start of mopidyService.js ---
+    ```
 
 // mopidyService.js
 const MopidyClient = require('../mopidy');
@@ -1480,10 +1625,12 @@ class MopidyService {
 }
 
 module.exports = MopidyService;
+    ```
     --- End of mopidyService.js ---
 
-  File: socket.js
+  # File: socket.js
   --- Start of socket.js ---
+  ```
 const socketIo = require('socket.io');
 
 let io;
@@ -1499,20 +1646,24 @@ module.exports = {
         }
         return io;
     }
-};  --- End of socket.js ---
+};  ```
+  --- End of socket.js ---
 
-  Directory: utils
-    File: logger.js
+  # Directory: utils
+    # File: logger.js
     --- Start of logger.js ---
+    ```
 function logWithTimestamp(message) {
     const timestamp = new Date().toISOString();
     console.log(`[${timestamp}] ${message}`);
 }
 
-module.exports = { logWithTimestamp };    --- End of logger.js ---
+module.exports = { logWithTimestamp };    ```
+    --- End of logger.js ---
 
-    File: polly_util.js
+    # File: polly_util.js
     --- Start of polly_util.js ---
+    ```
 const AWS = require('aws-sdk');
 const Stream = require('stream');
 const { exec, spawn } = require('child_process');
@@ -1583,11 +1734,14 @@ async function playSound(filePath) {
     });
 }
 
-module.exports = { synthesizeSpeech, playSound };    --- End of polly_util.js ---
+module.exports = { synthesizeSpeech, playSound };
+    ```
+    --- End of polly_util.js ---
 
-  Directory: views
-    File: index.ejs
+  # Directory: views
+    # File: index.ejs
     --- Start of index.ejs ---
+    ```
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -1708,5 +1862,41 @@ module.exports = { synthesizeSpeech, playSound };    --- End of polly_util.js --
     </script>
 </body>
 </html>
+    ```
     --- End of index.ejs ---
+
+  # Directory: websocket
+    # File: socketHandler.js
+    --- Start of socketHandler.js ---
+    ```
+
+// socketHandler.js
+const socketIo = require('socket.io');
+
+class SocketHandler {
+    constructor(server) {
+        this.io = socketIo(server);
+        this.io.on('connection', (socket) => {
+            console.log('New client connected');
+
+            socket.on('disconnect', () => {
+                console.log('Client disconnected');
+            });
+
+            // Add more event handlers here
+        });
+    }
+
+    emit(event, data) {
+        this.io.emit(event, data);
+    }
+
+    on(event, handler) {
+        this.io.on(event, handler);
+    }
+}
+
+module.exports = SocketHandler;
+    ```
+    --- End of socketHandler.js ---
 

@@ -68,4 +68,18 @@ async function playSound(filePath) {
     });
 }
 
-module.exports = { synthesizeSpeech, playSound };
+// New helper function to play ding sound followed by TTS
+async function playTTSWithDing(text) {
+    try {
+        // Play the ding sound
+        const dingPath = path.join(__dirname, '..', 'sounds', 'ding.wav');
+        await playSound(dingPath);
+
+        // Synthesize and play the TTS
+        await synthesizeSpeech(text);
+    } catch (error) {
+        console.error('Error in playTTSWithDing:', error);
+    }
+}
+
+module.exports = { synthesizeSpeech, playSound, playTTSWithDing };

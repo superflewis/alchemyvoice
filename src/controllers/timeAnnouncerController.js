@@ -1,5 +1,5 @@
 const axios = require('axios');
-const { synthesizeSpeech } = require('../utils/polly_util');
+const { playTTSWithDing } = require('../utils/polly_util');
 
 async function getAffirmation() {
     try {
@@ -32,17 +32,13 @@ async function announceTime() {
     timeString += ` ${ampm}`;
 
     const affirmation = await getAffirmation();
-    let announcement = '';
-
-    // Randomly decide whether to put the affirmation before or after the time
-    if (Math.random() < 0.5) {
-        announcement = `${affirmation}. ${timeString}`;
-    } else {
-        announcement = `${timeString}. ${affirmation}`;
-    }
+    
+    // Construct the full announcement with an introduction
+    const introduction = "Attention, the current time is";
+    const announcement = `${introduction} ${timeString}. Remember, ${affirmation}.`;
 
     try {
-        await synthesizeSpeech(announcement);
+        await playTTSWithDing(announcement);
         console.log('Time announced successfully');
     } catch (error) {
         console.error('Error announcing time:', error);
