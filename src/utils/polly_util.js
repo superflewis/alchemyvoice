@@ -4,6 +4,7 @@ const { exec, spawn } = require('child_process');
 const util = require('util');
 const execPromise = util.promisify(exec);
 const path = require('path');  // Add this line to require the path module
+
 const Polly = new AWS.Polly({
     region: 'us-east-1'
 });
@@ -22,12 +23,12 @@ async function synthesizeSpeech(text) {
             } else if (data && data.AudioStream instanceof Buffer) {
                 try {
                     const audioBuffer = data.AudioStream;
-                    const audioDuration = audioBuffer.length / 32000; // assuming 16-bit PCM at 16kHz
+                    const audioDuration = audioBuffer.length / 32000;  // assuming 16-bit PCM at 16kHz
 
-                    console.log(`Starting strobe effect for ${audioDuration} seconds...`);
+                    console.log(`Starting Knight Rider effect for ${audioDuration} seconds...`);
 
-                    const strobeProcess = spawn('python3', ['scripts/lights.py', 'strobe', audioDuration.toString()]);
-                    
+                    const knightRiderProcess = spawn('python3', ['scripts/lights.py', 'knight_rider', '0', '0', '255', audioDuration.toString()]);
+
                     const bufferStream = new Stream.PassThrough();
                     bufferStream.end(audioBuffer);
 
@@ -35,20 +36,20 @@ async function synthesizeSpeech(text) {
                     bufferStream.pipe(player.stdin);
 
                     player.on('close', async () => {
-                        console.log('Stopping strobe effect...');
-                        strobeProcess.kill(); // Ensure strobe process is stopped
+                        console.log('Stopping Knight Rider effect...');
+                        knightRiderProcess.kill();  // Ensure Knight Rider process is stopped
                         await execPromise('python3 scripts/lights.py off');
                         resolve();
                     });
 
                     player.on('error', async (error) => {
-                        console.log('Error during audio playback. Stopping strobe effect...');
-                        strobeProcess.kill(); // Ensure strobe process is stopped
+                        console.log('Error during audio playback. Stopping Knight Rider effect...');
+                        knightRiderProcess.kill();  // Ensure Knight Rider process is stopped
                         await execPromise('python3 scripts/lights.py off');
                         reject(error);
                     });
                 } catch (error) {
-                    console.log('Error during TTS. Stopping strobe effect...');
+                    console.log('Error during TTS. Stopping Knight Rider effect...');
                     await execPromise('python3 scripts/lights.py off');
                     reject(error);
                 }

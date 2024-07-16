@@ -615,53 +615,11 @@ module.exports = {
 };    ```
     --- End of sttController.js ---
 
-    # File: testPvRecorder.js
-    --- Start of testPvRecorder.js ---
-    ```
-const { PvRecorder } = require('@picovoice/pvrecorder-node');
-
-async function testPvRecorder(device) {
-  try {
-    console.log(`Testing PvRecorder with device: ${device || 'default'}`);
-    
-    // Log available devices
-    const devices = PvRecorder.getAudioDevices();
-    console.log('Available audio devices:', devices);
-    
-    const recorder = new PvRecorder(512, device);
-    await recorder.start();
-    console.log(`PvRecorder initialized successfully with device: ${device || 'default'}`);
-    recorder.stop();
-    recorder.release();
-  } catch (error) {
-    console.error(`Error initializing PvRecorder with device ${device || 'default'}:`, error.message);
-  }
-}
-
-const devices = [
-  null,  // Default device
-  'default',
-  'monoinput',
-  'dsnooped_mono',
-  'hw:CARD=seeed2micvoicec,DEV=0',
-  'plughw:CARD=seeed2micvoicec,DEV=0',
-  'sysdefault:CARD=seeed2micvoicec',
-  'dsnoop:CARD=seeed2micvoicec,DEV=0'
-];
-
-(async () => {
-  for (const device of devices) {
-    await testPvRecorder(device);
-  }
-})();
-    ```
-    --- End of testPvRecorder.js ---
-
     # File: timeAnnouncerController.js
     --- Start of timeAnnouncerController.js ---
     ```
 const axios = require('axios');
-const { synthesizeSpeech } = require('../utils/polly_util');
+const { playTTSWithDing } = require('../utils/polly_util');
 
 async function getAffirmation() {
     try {
@@ -694,17 +652,13 @@ async function announceTime() {
     timeString += ` ${ampm}`;
 
     const affirmation = await getAffirmation();
-    let announcement = '';
-
-    // Randomly decide whether to put the affirmation before or after the time
-    if (Math.random() < 0.5) {
-        announcement = `${affirmation}. ${timeString}`;
-    } else {
-        announcement = `${timeString}. ${affirmation}`;
-    }
+    
+    // Construct the full announcement with an introduction
+    const introduction = "Attention, the current time is";
+    const announcement = `${introduction} ${timeString}. Remember, ${affirmation}.`;
 
     try {
-        await synthesizeSpeech(announcement);
+        await playTTSWithDing(announcement);
         console.log('Time announced successfully');
     } catch (error) {
         console.error('Error announcing time:', error);
@@ -722,7 +676,8 @@ function scheduleHourlyAnnouncement() {
     }, delay);
 }
 
-module.exports = { announceTime, scheduleHourlyAnnouncement };    ```
+module.exports = { announceTime, scheduleHourlyAnnouncement };
+    ```
     --- End of timeAnnouncerController.js ---
 
     # File: wakeWordController.js
@@ -1669,7 +1624,7 @@ const Stream = require('stream');
 const { exec, spawn } = require('child_process');
 const util = require('util');
 const execPromise = util.promisify(exec);
-
+const path = require('path');  // Add this line to require the path module
 const Polly = new AWS.Polly({
     region: 'us-east-1'
 });
@@ -1734,7 +1689,21 @@ async function playSound(filePath) {
     });
 }
 
-module.exports = { synthesizeSpeech, playSound };
+// New helper function to play ding sound followed by TTS
+async function playTTSWithDing(text) {
+    try {
+        // Play the ding sound
+        const dingPath = path.join(__dirname, '..', 'sounds', 'ding.wav');
+        await playSound(dingPath);
+
+        // Synthesize and play the TTS
+        await synthesizeSpeech(text);
+    } catch (error) {
+        console.error('Error in playTTSWithDing:', error);
+    }
+}
+
+module.exports = { synthesizeSpeech, playSound, playTTSWithDing };
     ```
     --- End of polly_util.js ---
 
@@ -1754,7 +1723,7 @@ module.exports = { synthesizeSpeech, playSound };
 </head>
 <body>
     <header>
-        <h1>Smart Home Dashboard</h1>
+        <h1>AlchemyVoice Dash</h1>
         <div id="time-display"></div>
         <button id="toggle-theme">Toggle Theme</button>
     </header>
@@ -1818,10 +1787,13 @@ module.exports = { synthesizeSpeech, playSound };
         // Function to update the current time
         function updateTime() {
             const now = new Date();
-            const hours = String(now.getHours()).padStart(2, '0');
+            let hours = now.getHours();
             const minutes = String(now.getMinutes()).padStart(2, '0');
             const seconds = String(now.getSeconds()).padStart(2, '0');
-            const timeString = `${hours}:${minutes}:${seconds}`;
+            const ampm = hours >= 12 ? 'PM' : 'AM';
+            hours = hours % 12;
+            hours = hours ? hours : 12; // the hour '0' should be '12'
+            const timeString = `${hours}:${minutes}:${seconds} ${ampm}`;
             document.getElementById('time-display').textContent = timeString;
         }
 

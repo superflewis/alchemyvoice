@@ -56,7 +56,7 @@ const handleWakeWord = async () => {
         const dingPath = path.join(__dirname, '..', '..', 'sounds', 'ding.wav');
         playSound(dingPath).catch(error => logWithTimestamp(`Error playing ding: ${error}`));
         
-        await setLights('pulse', 0, 0, 255, 5); // Electric blue pulse effect
+        await setLights('knight_rider', 0, 0, 255, 5);  // Knight Rider effect in blue
         
         const transcription = await sttController.transcribeAudio();
         logWithTimestamp(`Transcription: ${transcription || 'No transcription result received.'}`);
