@@ -63,8 +63,6 @@ const handleWakeWord = async () => {
         
         socket.io.emit('transcriptionResult', { message: transcription || 'I didn\'t catch that. Could you please repeat?' });
 
-        await setLights('strobe', 0, 0, 255, 2); // Electric blue strobe effect during STT
-        await new Promise(resolve => setTimeout(resolve, 2000));
         await setLights('off');
     } catch (error) {
         logWithTimestamp(`Error in transcription: ${error}`);

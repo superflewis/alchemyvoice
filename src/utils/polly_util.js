@@ -3,7 +3,7 @@ const Stream = require('stream');
 const { exec, spawn } = require('child_process');
 const util = require('util');
 const execPromise = util.promisify(exec);
-const path = require('path');  // Add this line to require the path module
+const path = require('path');
 
 const Polly = new AWS.Polly({
     region: 'us-east-1'
