@@ -1,11 +1,15 @@
-const { PollyClient, SynthesizeSpeechCommand } = require("@aws-sdk/client-polly");
+const AWS = require('aws-sdk');
 const Stream = require('stream');
-const { exec, spawn } = require('child_process');
+const { spawn } = require('child_process');
+const { exec } = require('child_process');
 const util = require('util');
 const execPromise = util.promisify(exec);
-const path = require('path');
+const { logWithTimestamp } = require('./logger');
+const { setLights } = require('../controllers/lightController'); // Ensure this path is correct
 
-const polly = new PollyClient({ region: 'us-east-1' });
+const polly = new AWS.Polly({
+    region: 'us-east-1'
+});
 
 async function synthesizeSpeech(text) {
     const params = {
@@ -15,62 +19,46 @@ async function synthesizeSpeech(text) {
     };
 
     try {
-        const data = await polly.send(new SynthesizeSpeechCommand(params));
-        if (data && data.AudioStream instanceof Buffer) {
-            const audioBuffer = data.AudioStream;
-            const audioDuration = audioBuffer.length / 32000;  // assuming 16-bit PCM at 16kHz
-
-            console.log(`Starting Knight Rider effect for ${audioDuration} seconds...`);
-
-            const knightRiderProcess = spawn('python3', ['../scripts/lights.py', 'knight_rider', '0', '0', '255', audioDuration.toString()]);
-
+        logWithTimestamp('Synthesizing speech with Polly...');
+        const data = await polly.synthesizeSpeech(params).promise();
+        if (data.AudioStream instanceof Buffer) {
             const bufferStream = new Stream.PassThrough();
-            bufferStream.end(audioBuffer);
+            bufferStream.end(data.AudioStream);
 
-            const player = exec('aplay -f S16_LE -r 16000');
+            logWithTimestamp('Starting Knight Rider effect...');
+            const knightRiderProcess = spawn('python3', ['/home/williew/alchemyvoice/scripts/lights.py', 'knight_rider', '0', '0', '255', '5']); // Ensure this path is correct
+
+            const player = spawn('aplay', ['-f', 'S16_LE', '-r', '16000']);
             bufferStream.pipe(player.stdin);
 
             player.on('close', async () => {
-                console.log('Stopping Knight Rider effect...');
-                knightRiderProcess.kill();  // Ensure Knight Rider process is stopped
-                await execPromise('python3 ../scripts/lights.py off');
+                logWithTimestamp('Stopping Knight Rider effect...');
+                knightRiderProcess.kill();
+                await setLights('off');
+                logWithTimestamp('Synthesized speech played successfully');
             });
 
             player.on('error', async (error) => {
-                console.log('Error during audio playback. Stopping Knight Rider effect...');
-                knightRiderProcess.kill();  // Ensure Knight Rider process is stopped
-                await execPromise('python3 ../scripts/lights.py off');
+                logWithTimestamp(`Error during audio playback: ${error.message}`);
+                knightRiderProcess.kill();
+                await setLights('off');
             });
+        } else {
+            logWithTimestamp('No audio stream received from Polly');
         }
     } catch (error) {
-        console.log('Error during TTS. Stopping Knight Rider effect...');
-        await execPromise('python3 ../scripts/lights.py off');
+        logWithTimestamp(`Error in Polly TTS: ${error.message}`);
     }
 }
 
 async function playSound(filePath) {
-    return new Promise((resolve, reject) => {
-        const player = exec(`aplay ${filePath}`);
-
-        player.on('close', () => resolve());
-        player.on('error', (error) => reject(error));
-        player.stdout.on('data', (data) => console.log(`stdout: ${data}`));
-        player.stderr.on('data', (data) => console.error(`stderr: ${data}`));
-    });
-}
-
-// New helper function to play ding sound followed by TTS
-async function playTTSWithDing(text) {
     try {
-        // Play the ding sound
-        const dingPath = path.join(__dirname, '..', '..', 'sounds', 'ding.wav');
-        await playSound(dingPath);
-
-        // Synthesize and play the TTS
-        await synthesizeSpeech(text);
+        logWithTimestamp(`Playing sound: ${filePath}`);
+        await execPromise(`aplay ${filePath}`);
+        logWithTimestamp(`Sound played successfully: ${filePath}`);
     } catch (error) {
-        console.error('Error in playTTSWithDing:', error);
+        logWithTimestamp(`Error playing sound: ${error.message}`);
     }
 }
 
-module.exports = { synthesizeSpeech, playSound, playTTSWithDing };
+module.exports = { synthesizeSpeech, playSound };

@@ -4,7 +4,7 @@ const socketIo = require('socket.io');
 const { logWithTimestamp } = require('./utils/logger');
 const { initializeWakeWordDetection } = require('./controllers/wakeWordController');
 const { scheduleHourlyAnnouncements } = require('./utils/scheduler');
-const { playSound } = require('./utils/polly_util');
+const { synthesizeSpeech } = require('./utils/polly_util');
 
 const app = express();
 const server = http.createServer(app);
@@ -33,7 +33,6 @@ server.listen(PORT, () => {
 async function playStartupMessage() {
     try {
         const message = 'System Started';
-        const { synthesizeSpeech } = require('./utils/polly_util');
         logWithTimestamp('Playing startup message...');
         await synthesizeSpeech(message);
         logWithTimestamp('Startup message played successfully');
