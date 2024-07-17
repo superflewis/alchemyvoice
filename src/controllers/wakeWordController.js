@@ -106,7 +106,7 @@ const initializeWakeWordDetection = async () => {
             logWithTimestamp(`Stack trace: ${error.stack}`);
         }
     }
-};
+}; 
 
 module.exports = {
     initializeWakeWordDetection,
