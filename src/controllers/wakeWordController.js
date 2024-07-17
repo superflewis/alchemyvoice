@@ -119,5 +119,5 @@ const initializeWakeWordDetection = async () => {
 };
 
 module.exports = {
-    initializeWakeWordDetection,
+    1initializeWakeWordDetection,
 };
