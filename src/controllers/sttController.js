@@ -2,7 +2,7 @@ const speech = require('@google-cloud/speech');
 const config = require('../config/config');
 const audioController = require('./audioController');
 const { logWithTimestamp } = require('../utils/logger');
-const { setLights } = require('./wakeWordController');  // Importing setLights function
+const { setLights } = require('./lightController');
 
 const client = new speech.SpeechClient();
 

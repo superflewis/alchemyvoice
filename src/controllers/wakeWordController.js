@@ -1,14 +1,12 @@
 const { Porcupine, BuiltinKeyword } = require('@picovoice/porcupine-node');
 const { PvRecorder } = require('@picovoice/pvrecorder-node');
+const path = require('path');  // Add this line
 const config = require('../config/config');
 const sttController = require('./sttController');
-const { exec } = require('child_process');
-const util = require('util');
-const path = require('path');
-const { playSound } = require('../utils/polly_util');
 const { logWithTimestamp } = require('../utils/logger');
-const execPromise = util.promisify(exec);
 const socket = require('../socket');
+const { setLights } = require('./lightController');
+const { playSound } = require('../utils/polly_util');  // Add this line
 
 let recorder;
 let isProcessing = false;
@@ -26,16 +24,6 @@ async function startRecorder(frameLength) {
             logWithTimestamp(`Error creating PvRecorder: ${error.message}`);
             throw error;
         }
-    }
-}
-
-async function setLights(command, ...args) {
-    const argString = args.map(arg => Array.isArray(arg) ? arg.join(',') : arg).join(' ');
-    const scriptPath = path.join(__dirname, '..', '..', 'scripts', 'lights.py');
-    try {
-        await execPromise(`python3 ${scriptPath} ${command} ${argString}`);
-    } catch (error) {
-        logWithTimestamp(`Error executing lights.py: ${error.message}`);
     }
 }
 
@@ -110,5 +98,4 @@ const initializeWakeWordDetection = async () => {
 
 module.exports = {
     initializeWakeWordDetection,
-    setLights,  // Exporting setLights for use in other modules
 };
