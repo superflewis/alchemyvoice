@@ -1,0 +1,128 @@
+/* Base styles */
+body {
+    font-family: 'Roboto', sans-serif;
+    background-color: #f7f9fc; /* Light background color for a clean look */
+    color: #333; /* Dark text color for readability */
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 90%;
+    padding: 20px;
+    background-color: #0066cc; /* Bright header background */
+    border-radius: 10px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    margin: 20px 0;
+    color: #fff; /* White text for contrast */
+}
+
+header h1 {
+    margin: 0;
+}
+
+#time-display {
+    font-size: 2em;
+}
+
+.container {
+    display: flex;
+    justify-content: space-between;
+    width: 90%;
+    margin: 20px auto;
+    padding: 20px;
+    background-color: #fff; /* White background for contrast */
+    border-radius: 10px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+.column {
+    flex: 1;
+    margin: 0 10px;
+}
+
+.left-column, .right-column {
+    flex: 0.5;
+}
+
+.middle-column {
+    flex: 2;
+}
+
+.widget {
+    background-color: #ffffff; /* White background for widgets */
+    padding: 15px;
+    margin-bottom: 20px;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    color: #333; /* Dark text for readability */
+}
+
+.widget h3 {
+    margin-top: 0;
+    color: #0066cc; /* Bright color for widget headers */
+}
+
+button {
+    display: block;
+    width: 100%;
+    margin-bottom: 10px;
+    padding: 10px;
+    border: none;
+    background-color: #28a745; /* Green button background */
+    color: #fff; /* White text for contrast */
+    border-radius: 5px;
+    cursor: pointer;
+    transition: background-color 0.3s;
+}
+
+button:hover {
+    background-color: #218838; /* Darker green on hover */
+}
+
+.dark-theme {
+    background-color: #333; /* Dark background for dark theme */
+    color: #f0f0f0; /* Light text for contrast */
+}
+
+.dark-theme .header, .dark-theme .container, .dark-theme .widget {
+    background-color: #444; /* Dark background for elements */
+    color: #f0f0f0; /* Light text for contrast */
+}
+
+.dark-theme button {
+    background-color: #007bff; /* Blue button background */
+}
+
+.dark-theme button:hover {
+    background-color: #0056b3; /* Darker blue on hover */
+}
+
+/* Add these styles to your existing styles.css file */
+
+.messages {
+    height: 300px;
+    overflow-y: auto;
+    border: 1px solid var(--input-border);
+    padding: 10px;
+    margin-bottom: 10px;
+}
+
+.system-message {
+    color: #888;
+    font-style: italic;
+}
+
+.assistant-message {
+    color: #0066cc;
+}
+
+.error-message {
+    color: #cc0000;
+}
