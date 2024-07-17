@@ -1,14 +1,15 @@
+// Path: src/app.js
 const express = require('express');
 const http = require('http');
-const socketIo = require('socket.io');
 const { logWithTimestamp } = require('./utils/logger');
 const { initializeWakeWordDetection } = require('./controllers/wakeWordController');
 const { scheduleHourlyAnnouncements } = require('./utils/scheduler');
 const { synthesizeSpeech } = require('./utils/polly_util');
+const socket = require('./socket'); // Import the socket module
 
 const app = express();
 const server = http.createServer(app);
-const io = socketIo(server);
+const io = socket.init(server); // Initialize socket.io
 
 const PORT = process.env.PORT || 3000;
 
@@ -21,15 +22,7 @@ io.on('connection', (socket) => {
     });
 });
 
-// Schedule hourly announcements
-scheduleHourlyAnnouncements();
-
-server.listen(PORT, () => {
-    logWithTimestamp(`Server is running on port ${PORT}`);
-    playStartupMessage();
-    initializeWakeWordDetection();
-});
-
+// Define the playStartupMessage function before using it
 async function playStartupMessage() {
     try {
         const message = 'System Started';
@@ -40,3 +33,12 @@ async function playStartupMessage() {
         logWithTimestamp(`Error playing startup message: ${error.message}`);
     }
 }
+
+// Schedule hourly announcements
+scheduleHourlyAnnouncements();
+
+server.listen(PORT, () => {
+    logWithTimestamp(`Server is running on port ${PORT}`);
+    playStartupMessage();
+    initializeWakeWordDetection();
+});

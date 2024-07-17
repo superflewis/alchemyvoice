@@ -1,12 +1,12 @@
+// Path: src/controllers/sttController.js
 const speech = require('@google-cloud/speech');
 const config = require('../config/config');
-const audioController = require('./audioController');
 const { logWithTimestamp } = require('../utils/logger');
 const { setLights } = require('./lightController');
 
 const client = new speech.SpeechClient();
 
-const transcribeAudio = () => {
+const transcribeAudio = (audioStream) => {
     return new Promise((resolve, reject) => {
         const request = {
             config: {
@@ -52,8 +52,6 @@ const transcribeAudio = () => {
                 }
             });
 
-        const audioStream = audioController.startRecording();
-        
         audioStream.on('data', (chunk) => {
             if (!streamEnded) {
                 logWithTimestamp('Audio data received...');
@@ -61,15 +59,11 @@ const transcribeAudio = () => {
             }
         });
 
-        // Pulse green while recording
-        logWithTimestamp('Pulsing green lights while recording...');
-        setLights('pulse_green', 5);
-
         // Stop recording after 2 seconds
         setTimeout(() => {
             if (!streamEnded) {
                 logWithTimestamp('Stopping recording after timeout...');
-                audioController.stopRecording();
+                audioStream.emit('end');
                 recognizeStream.end();
                 setLights('off');
             }

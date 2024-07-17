@@ -1,30 +1,33 @@
+// Path: src/controllers/wakeWordController.js
 const { Porcupine, BuiltinKeyword } = require('@picovoice/porcupine-node');
 const { PvRecorder } = require('@picovoice/pvrecorder-node');
+const mic = require('node-microphone');
 const path = require('path');
 const config = require('../config/config');
 const sttController = require('./sttController');
 const { logWithTimestamp } = require('../utils/logger');
-const socket = require('../socket');
+const socket = require('../socket'); // Import the socket instance
 const { setLights } = require('./lightController');
 const { playSound } = require('../utils/polly_util');
 
-let recorder;
+let pvRecorder;
 let isProcessing = false;
 
-async function startRecorder(frameLength) {
-    if (!recorder) {
-        logWithTimestamp(`Initializing recorder with frame length: ${frameLength}`);
+async function startPvRecorder(frameLength) {
+    if (!pvRecorder) {
+        logWithTimestamp(`Initializing PvRecorder with frame length: ${frameLength}`);
         logWithTimestamp('Using default audio device');
         
         try {
-            recorder = new PvRecorder(frameLength, -1);
-            await recorder.start();
-            logWithTimestamp('Recorder initialized successfully');
+            pvRecorder = new PvRecorder(frameLength, -1);
+            await pvRecorder.start();
+            logWithTimestamp('PvRecorder initialized successfully');
         } catch (error) {
             logWithTimestamp(`Error creating PvRecorder: ${error.message}`);
             throw error;
         }
     }
+    return pvRecorder;
 }
 
 const handleWakeWord = async () => {
@@ -37,23 +40,27 @@ const handleWakeWord = async () => {
 
     try {
         logWithTimestamp('Wake word detected!');
-        
         socket.io.emit('wakeWordDetected', { message: 'Wake word detected!' });
 
         // Start the Knight Rider effect
         logWithTimestamp('Starting Knight Rider effect...');
         await setLights('knight_rider', 0, 0, 255, 5);
 
-        // Start recording before playing the ding sound
-        const transcriptionPromise = sttController.transcribeAudio();
-        
+        // Start recording audio and play the ding sound
+        const micInstance = new mic();
+        const micInputStream = micInstance.startRecording();
+        logWithTimestamp('Started audio recording...');
+
+        // Play the ding sound immediately after starting recording
         const dingPath = path.join(__dirname, '..', '..', 'sounds', 'ding.wav');
         logWithTimestamp('Playing ding sound...');
         await playSound(dingPath);
 
-        // Pulse green while recording
+        // Pulse green lights while recording
         logWithTimestamp('Pulsing green lights while recording...');
         await setLights('pulse_green', 5);
+
+        const transcriptionPromise = sttController.transcribeAudio(micInputStream);
 
         const transcription = await transcriptionPromise;
         logWithTimestamp(`Transcription received: ${transcription || 'No transcription result received.'}`);
@@ -69,6 +76,7 @@ const handleWakeWord = async () => {
 
         logWithTimestamp('Turning off lights...');
         await setLights('off');
+        micInstance.stopRecording();
     } catch (error) {
         logWithTimestamp(`Error in transcription: ${error}`);
         socket.io.emit('error', { message: 'An error occurred while processing your request.' });
@@ -90,13 +98,13 @@ const initializeWakeWordDetection = async () => {
         );
         logWithTimestamp('Porcupine initialized successfully.');
 
-        logWithTimestamp('Initializing recorder...');
-        await startRecorder(handle.frameLength);
+        logWithTimestamp('Initializing PvRecorder...');
+        await startPvRecorder(handle.frameLength);
 
         logWithTimestamp('Entering detection loop...');
         while (true) {
             try {
-                const pcm = await recorder.read();
+                const pcm = await pvRecorder.read();
                 const detectionResult = handle.process(pcm);
                 if (detectionResult >= 0) {
                     await handleWakeWord();

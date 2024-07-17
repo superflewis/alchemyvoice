@@ -6,7 +6,7 @@ const execPromise = util.promisify(exec);
 
 async function setLights(command, ...args) {
     const argString = args.map(arg => Array.isArray(arg) ? arg.join(',') : arg).join(' ');
-    const scriptPath = path.join(__dirname, '../../scripts/lights.py'); // Corrected path to script
+    const scriptPath = path.join(__dirname, '../../scripts/lights.py');  // Ensure this path is correct
     logWithTimestamp(`Executing lights command: python3 ${scriptPath} ${command} ${argString}`);
     try {
         await execPromise(`python3 ${scriptPath} ${command} ${argString}`);
