@@ -1,61 +1,51 @@
-const AWS = require('aws-sdk');
+const { PollyClient, SynthesizeSpeechCommand } = require("@aws-sdk/client-polly");
 const Stream = require('stream');
 const { exec, spawn } = require('child_process');
 const util = require('util');
 const execPromise = util.promisify(exec);
 const path = require('path');
 
-const Polly = new AWS.Polly({
-    region: 'us-east-1'
-});
+const polly = new PollyClient({ region: 'us-east-1' });
 
 async function synthesizeSpeech(text) {
-    return new Promise((resolve, reject) => {
-        const params = {
-            Text: text,
-            OutputFormat: 'pcm',
-            VoiceId: 'Joanna'
-        };
+    const params = {
+        Text: text,
+        OutputFormat: 'pcm',
+        VoiceId: 'Joanna'
+    };
 
-        Polly.synthesizeSpeech(params, async (err, data) => {
-            if (err) {
-                reject(err);
-            } else if (data && data.AudioStream instanceof Buffer) {
-                try {
-                    const audioBuffer = data.AudioStream;
-                    const audioDuration = audioBuffer.length / 32000;  // assuming 16-bit PCM at 16kHz
+    try {
+        const data = await polly.send(new SynthesizeSpeechCommand(params));
+        if (data && data.AudioStream instanceof Buffer) {
+            const audioBuffer = data.AudioStream;
+            const audioDuration = audioBuffer.length / 32000;  // assuming 16-bit PCM at 16kHz
 
-                    console.log(`Starting Knight Rider effect for ${audioDuration} seconds...`);
+            console.log(`Starting Knight Rider effect for ${audioDuration} seconds...`);
 
-                    const knightRiderProcess = spawn('python3', ['scripts/lights.py', 'knight_rider', '0', '0', '255', audioDuration.toString()]);
+            const knightRiderProcess = spawn('python3', ['../scripts/lights.py', 'knight_rider', '0', '0', '255', audioDuration.toString()]);
 
-                    const bufferStream = new Stream.PassThrough();
-                    bufferStream.end(audioBuffer);
+            const bufferStream = new Stream.PassThrough();
+            bufferStream.end(audioBuffer);
 
-                    const player = exec('aplay -f S16_LE -r 16000');
-                    bufferStream.pipe(player.stdin);
+            const player = exec('aplay -f S16_LE -r 16000');
+            bufferStream.pipe(player.stdin);
 
-                    player.on('close', async () => {
-                        console.log('Stopping Knight Rider effect...');
-                        knightRiderProcess.kill();  // Ensure Knight Rider process is stopped
-                        await execPromise('python3 scripts/lights.py off');
-                        resolve();
-                    });
+            player.on('close', async () => {
+                console.log('Stopping Knight Rider effect...');
+                knightRiderProcess.kill();  // Ensure Knight Rider process is stopped
+                await execPromise('python3 ../scripts/lights.py off');
+            });
 
-                    player.on('error', async (error) => {
-                        console.log('Error during audio playback. Stopping Knight Rider effect...');
-                        knightRiderProcess.kill();  // Ensure Knight Rider process is stopped
-                        await execPromise('python3 scripts/lights.py off');
-                        reject(error);
-                    });
-                } catch (error) {
-                    console.log('Error during TTS. Stopping Knight Rider effect...');
-                    await execPromise('python3 scripts/lights.py off');
-                    reject(error);
-                }
-            }
-        });
-    });
+            player.on('error', async (error) => {
+                console.log('Error during audio playback. Stopping Knight Rider effect...');
+                knightRiderProcess.kill();  // Ensure Knight Rider process is stopped
+                await execPromise('python3 ../scripts/lights.py off');
+            });
+        }
+    } catch (error) {
+        console.log('Error during TTS. Stopping Knight Rider effect...');
+        await execPromise('python3 ../scripts/lights.py off');
+    }
 }
 
 async function playSound(filePath) {
@@ -73,7 +63,7 @@ async function playSound(filePath) {
 async function playTTSWithDing(text) {
     try {
         // Play the ding sound
-        const dingPath = path.join(__dirname, '..', 'sounds', 'ding.wav');
+        const dingPath = path.join(__dirname, '..', '..', 'sounds', 'ding.wav');
         await playSound(dingPath);
 
         // Synthesize and play the TTS

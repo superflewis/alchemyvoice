@@ -1,58 +1,43 @@
 const express = require('express');
 const http = require('http');
-const socket = require('./socket');
-const indexRouter = require('./routes/index');
-const wakeWordController = require('./controllers/wakeWordController');
-const { scheduleHourlyAnnouncement } = require('./controllers/timeAnnouncerController');
+const socketIo = require('socket.io');
 const { logWithTimestamp } = require('./utils/logger');
-const { synthesizeSpeech } = require('./utils/polly_util');
-const path = require('path');
-
-logWithTimestamp('Initializing application...');
+const { initializeWakeWordDetection } = require('./controllers/wakeWordController');
+const { scheduleHourlyAnnouncements } = require('./utils/scheduler');
+const { playSound } = require('./utils/polly_util');
 
 const app = express();
 const server = http.createServer(app);
-const io = socket.init(server);
-
-app.set('view engine', 'ejs');
-app.set('views', path.join(__dirname, 'views'));
-app.use('/', indexRouter);
-
-// Serve static files
-app.use(express.static(path.join(__dirname, 'public')));
-
-// Set correct MIME types
-app.use((req, res, next) => {
-  if (req.url.endsWith('.js')) {
-    res.type('application/javascript');
-  } else if (req.url.endsWith('.css')) {
-    res.type('text/css');
-  }
-  next();
-});
+const io = socketIo(server);
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, async () => {
-  logWithTimestamp(`Server is running on port ${PORT}`);
-  
-  // Synthesize and play the startup message
-  try {
-    await synthesizeSpeech('System started.');
-    logWithTimestamp('Startup message played successfully');
-  } catch (error) {
-    logWithTimestamp(`Error playing startup message: ${error.message}`);
-  }
+
+app.use(express.static('public'));
+
+io.on('connection', (socket) => {
+    logWithTimestamp('New client connected');
+    socket.on('disconnect', () => {
+        logWithTimestamp('Client disconnected');
+    });
 });
 
-// Initialize wake word detection
-wakeWordController.initializeWakeWordDetection()
-  .then(() => {
-    logWithTimestamp('Wake word detection initialized successfully');
-  })
-  .catch((error) => {
-    logWithTimestamp(`Error initializing wake word detection: ${error.message}`);
-  });
+// Schedule hourly announcements
+scheduleHourlyAnnouncements();
 
-// Schedule hourly time announcements
-scheduleHourlyAnnouncement();
-logWithTimestamp('Hourly announcements scheduled');
+server.listen(PORT, () => {
+    logWithTimestamp(`Server is running on port ${PORT}`);
+    playStartupMessage();
+    initializeWakeWordDetection();
+});
+
+async function playStartupMessage() {
+    try {
+        const message = 'System Started';
+        const { synthesizeSpeech } = require('./utils/polly_util');
+        logWithTimestamp('Playing startup message...');
+        await synthesizeSpeech(message);
+        logWithTimestamp('Startup message played successfully');
+    } catch (error) {
+        logWithTimestamp(`Error playing startup message: ${error.message}`);
+    }
+}

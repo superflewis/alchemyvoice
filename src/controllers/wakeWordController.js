@@ -1,12 +1,12 @@
 const { Porcupine, BuiltinKeyword } = require('@picovoice/porcupine-node');
 const { PvRecorder } = require('@picovoice/pvrecorder-node');
-const path = require('path');  // Add this line
+const path = require('path');
 const config = require('../config/config');
 const sttController = require('./sttController');
 const { logWithTimestamp } = require('../utils/logger');
 const socket = require('../socket');
 const { setLights } = require('./lightController');
-const { playSound } = require('../utils/polly_util');  // Add this line
+const { playSound } = require('../utils/polly_util');
 
 let recorder;
 let isProcessing = false;
@@ -40,17 +40,34 @@ const handleWakeWord = async () => {
         
         socket.io.emit('wakeWordDetected', { message: 'Wake word detected!' });
 
+        // Start the Knight Rider effect
+        logWithTimestamp('Starting Knight Rider effect...');
+        await setLights('knight_rider', 0, 0, 255, 5);
+
         // Start recording before playing the ding sound
         const transcriptionPromise = sttController.transcribeAudio();
         
         const dingPath = path.join(__dirname, '..', '..', 'sounds', 'ding.wav');
+        logWithTimestamp('Playing ding sound...');
         await playSound(dingPath);
 
+        // Pulse green while recording
+        logWithTimestamp('Pulsing green lights while recording...');
+        await setLights('pulse_green', 5);
+
         const transcription = await transcriptionPromise;
-        logWithTimestamp(`Transcription: ${transcription || 'No transcription result received.'}`);
+        logWithTimestamp(`Transcription received: ${transcription || 'No transcription result received.'}`);
         
         socket.io.emit('transcriptionResult', { message: transcription || 'I didn\'t catch that. Could you please repeat?' });
 
+        // Use Polly to stream the TTS of the transcription
+        if (transcription) {
+            logWithTimestamp('Playing transcription using Polly TTS...');
+            const { synthesizeSpeech } = require('../utils/polly_util');
+            await synthesizeSpeech(transcription);
+        }
+
+        logWithTimestamp('Turning off lights...');
         await setLights('off');
     } catch (error) {
         logWithTimestamp(`Error in transcription: ${error}`);
@@ -94,7 +111,7 @@ const initializeWakeWordDetection = async () => {
             logWithTimestamp(`Stack trace: ${error.stack}`);
         }
     }
-}; 
+};
 
 module.exports = {
     initializeWakeWordDetection,

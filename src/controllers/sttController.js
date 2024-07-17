@@ -20,7 +20,7 @@ const transcribeAudio = () => {
 
         let streamEnded = false;
 
-        logWithTimestamp('Starting transcription stream');
+        logWithTimestamp('Starting transcription stream...');
         const recognizeStream = client
             .streamingRecognize(request)
             .on('error', (error) => {
@@ -56,16 +56,19 @@ const transcribeAudio = () => {
         
         audioStream.on('data', (chunk) => {
             if (!streamEnded) {
+                logWithTimestamp('Audio data received...');
                 recognizeStream.write(chunk);
             }
         });
 
+        // Pulse green while recording
+        logWithTimestamp('Pulsing green lights while recording...');
         setLights('pulse_green', 5);
 
         // Stop recording after 2 seconds
         setTimeout(() => {
             if (!streamEnded) {
-                logWithTimestamp('Stopping recording after timeout');
+                logWithTimestamp('Stopping recording after timeout...');
                 audioController.stopRecording();
                 recognizeStream.end();
                 setLights('off');
