@@ -2,6 +2,7 @@ const speech = require('@google-cloud/speech');
 const config = require('../config/config');
 const audioController = require('./audioController');
 const { logWithTimestamp } = require('../utils/logger');
+const { setLights } = require('./wakeWordController');  // Importing setLights function
 
 const client = new speech.SpeechClient();
 
@@ -26,6 +27,7 @@ const transcribeAudio = () => {
                 logWithTimestamp(`Error in transcription: ${error}`);
                 if (!streamEnded) {
                     streamEnded = true;
+                    setLights('off');
                     reject(error);
                 }
             })
@@ -37,6 +39,7 @@ const transcribeAudio = () => {
                     logWithTimestamp(`Transcription received: ${transcription}`);
                     streamEnded = true;
                     recognizeStream.end();
+                    setLights('off');
                     resolve(transcription);
                 }
             })
@@ -44,6 +47,7 @@ const transcribeAudio = () => {
                 if (!streamEnded) {
                     logWithTimestamp('Transcription stream ended without data');
                     streamEnded = true;
+                    setLights('off');
                     resolve('');
                 }
             });
@@ -56,12 +60,15 @@ const transcribeAudio = () => {
             }
         });
 
+        setLights('pulse_green', 5);
+
         // Stop recording after 2 seconds
         setTimeout(() => {
             if (!streamEnded) {
                 logWithTimestamp('Stopping recording after timeout');
                 audioController.stopRecording();
                 recognizeStream.end();
+                setLights('off');
             }
         }, 2000);
     });

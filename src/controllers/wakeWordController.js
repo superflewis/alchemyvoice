@@ -39,7 +39,6 @@ async function setLights(command, ...args) {
     }
 }
 
-
 const handleWakeWord = async () => {
     if (isProcessing) {
         logWithTimestamp('Already processing a command, ignoring this wake word.');
@@ -53,12 +52,13 @@ const handleWakeWord = async () => {
         
         socket.io.emit('wakeWordDetected', { message: 'Wake word detected!' });
 
+        // Start recording before playing the ding sound
+        const transcriptionPromise = sttController.transcribeAudio();
+        
         const dingPath = path.join(__dirname, '..', '..', 'sounds', 'ding.wav');
-        playSound(dingPath).catch(error => logWithTimestamp(`Error playing ding: ${error}`));
-        
-        await setLights('knight_rider', 0, 0, 255, 5);  // Knight Rider effect in blue
-        
-        const transcription = await sttController.transcribeAudio();
+        await playSound(dingPath);
+
+        const transcription = await transcriptionPromise;
         logWithTimestamp(`Transcription: ${transcription || 'No transcription result received.'}`);
         
         socket.io.emit('transcriptionResult', { message: transcription || 'I didn\'t catch that. Could you please repeat?' });
@@ -72,7 +72,6 @@ const handleWakeWord = async () => {
         logWithTimestamp('Listening for wake word...');
     }
 };
-
 
 const initializeWakeWordDetection = async () => {
     try {
@@ -95,7 +94,6 @@ const initializeWakeWordDetection = async () => {
                 const pcm = await recorder.read();
                 const detectionResult = handle.process(pcm);
                 if (detectionResult >= 0) {
-                    logWithTimestamp('Wake word detected!');
                     await handleWakeWord();
                 }
             } catch (loopError) {
@@ -110,7 +108,7 @@ const initializeWakeWordDetection = async () => {
     }
 };
 
-
 module.exports = {
     initializeWakeWordDetection,
+    setLights,  // Exporting setLights for use in other modules
 };
